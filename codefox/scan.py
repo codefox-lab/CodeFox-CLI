@@ -1,6 +1,8 @@
 import os
 
 from rich import print
+from rich.console import Console
+from rich.markdown import Markdown
 from rich.errors import MarkupError
 from rich.markup import escape
 
@@ -53,9 +55,13 @@ class Scan:
         try:
             try:
                 response = self.model.execute(diff_text)
+
+                console = Console()
+                text = Markdown(response.text, code_theme="manni")
                 print(
-                    f"[green]Scan result from model:[/green]\n{response.text}"
+                    f"[green]Scan result from model:[/green]\n"
                 )
+                console.print(text)
             except MarkupError:
                 print(
                     "[green]Scan result from model:[/green]\n"

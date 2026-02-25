@@ -51,12 +51,14 @@ class OpenRouter(BaseAPI):
             f"and identify potential risks:\n\n{diff_text}"
         )
 
-        rag_chunks = self._search(diff_text, k=8)
+        files_context = ""
+        if not self.review_config["diff_only"]:
+            rag_chunks = self._search(diff_text, k=8)
 
-        files_context = "\n\n".join(
-            f"<file path='{c['path']}'>\n{c['text']}\n</file>"
-            for c in rag_chunks
-        )
+            files_context = "\n\n".join(
+                f"<file path='{c['path']}'>\n{c['text']}\n</file>"
+                for c in rag_chunks
+            )
 
         completion = self.client.chat.completions.create(
             model=self.model_config["name"],

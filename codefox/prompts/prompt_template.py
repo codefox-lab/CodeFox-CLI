@@ -16,6 +16,7 @@ class PromptTemplate(Template):
 
         hard_mode = prompt_cfg.get("hard_mode", False)
         short_mode = prompt_cfg.get("short_mode", False)
+        strict_facts = prompt_cfg.get("strict_facts", False)
 
         parts: list[str] = []
 
@@ -23,6 +24,8 @@ class PromptTemplate(Template):
             parts.append(prompt_cfg["system"])
 
         else:
+            if strict_facts:
+                parts.append(audit_system.SYSTEM_STRICT_FACTS)
             if hard_mode:
                 parts.append(audit_system.SYSTEM_HARD_MODE)
                 parts.append(audit_system.SYSTEM_ANTI_HALLUCINATION)
@@ -73,22 +76,22 @@ class PromptTemplate(Template):
             parts.append(audit_system.SYSTEM_BASELINE_MODE)
 
         parts.append(f"""
-──────── REVIEW POLICY ────────
-Minimum severity: {review.get("severity")}
-Max findings: {review.get("max_issues")}
-Auto-fix: {review.get("suggest_fixes")}
-Diff-only mode: {review.get("diff_only")}
+## REVIEW POLICY
+- **Minimum severity:** {review.get("severity")}
+- **Max findings:** {review.get("max_issues")}
+- **Auto-fix:** {review.get("suggest_fixes")}
+- **Diff-only mode:** {review.get("diff_only")}
 """)
 
         severity = review.get("severity")
         if severity:
             parts.append(f"""
-Report only issues with severity >= {(severity or "").upper()}
+Report only issues with **severity >= {(severity or "").upper()}**
 """)
 
         if review.get("max_issues"):
             parts.append(f"""
-Limit the output to the {review.get("max_issues")} most critical findings.
+Limit the output to the **{review.get("max_issues")}** most critical findings.
 """)
 
         if prompt_cfg.get("extra"):

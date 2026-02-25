@@ -107,6 +107,7 @@ class Init(BaseCLI):
                 "prompt": {
                     "system": None,
                     "extra": None,
+                    "strict_facts": False,
                 },
             }
 

@@ -301,6 +301,7 @@ prompt:
   extra: null
   hard_mode: false
   short_mode: false
+  strict_facts: false
 ```
 
 ---
@@ -357,6 +358,15 @@ Enables stricter audit rules: anti-hallucination, business logic and regression 
 **Default:** `false`
 
 Requests shorter, more concise audit output.
+
+---
+
+### `prompt.strict_facts`
+
+**Type:** `boolean`  
+**Default:** `false`
+
+Reduces hallucinations for smaller or weaker models. Enforces: use only names that appear literally in the diff, do not invent class/API/file names, do not speculate; every claim must be traceable to a line in the diff. Prefer short, direct answers and avoid filler. Recommended when using small/local models (e.g. 7B–8B).
 
 ---
 
