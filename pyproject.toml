@@ -1,6 +1,6 @@
 [project]
 name = "codefox"
-version = "0.3.0"
+version = "0.3.1"
 description = "CodeFox CLI - code auditing and code review tool"
 readme = "README.md"
 requires-python = ">=3.11"
