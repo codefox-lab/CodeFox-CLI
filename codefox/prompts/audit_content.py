@@ -1,13 +1,16 @@
 CONTENT_RELEVANT_CONTEXT = """
 ## RELEVANT CONTEXT
-*(Use only if needed to trace data flow. Do not analyze this section by itself.)*
+*(Use only if needed to trace data flow.
+Do not analyze this section by itself.)*
 
 {files_context}
 """
 
 CONTENT_FULL = """# DIFF AUDIT
 
-**CRITICAL:** Describe only what is in the diff. Use exact names from the diff (do not invent or misspell, e.g. Ollama not Olla). If something is not in the diff, say "not in the diff" — do not speculate.
+**CRITICAL:** Describe only what is in the diff. Use exact names from the diff
+(do not invent or misspell, e.g. Ollama not Olla). If something is not in the
+diff, say "not in the diff" — do not speculate.
 
 ## Task
 Detect **behavior change** caused by the modified lines.

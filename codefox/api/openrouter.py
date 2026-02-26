@@ -1,19 +1,20 @@
-import math
 import os
 from typing import Any
 
 from openai import OpenAI
-from rich.progress import track
 
 from codefox.api.base_api import BaseAPI, ExecuteResponse, Response
 from codefox.prompts.prompt_template import PromptTemplate
 from codefox.utils.helper import Helper
+from codefox.utils.local_rag import LocalRAG
 
 
 class OpenRouter(BaseAPI):
     default_model_name = "qwen/qwen3-vl-30b-a3b-thinking"
-    default_embedding = "text-embedding-3-small"
+    default_embedding = "BAAI/bge-small-en-v1.5"
     base_url = "https://openrouter.ai/api/v1"
+    default_max_rag_chars = 4096
+    default_max_diff_chars = 16_000
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         super().__init__(config)
@@ -28,8 +29,7 @@ class OpenRouter(BaseAPI):
         ):
             self.model_config["embedding"] = self.default_embedding
 
-        self.files: list[dict[str, Any]] | None = None
-        self.index: list[dict[str, Any]] = []
+        self.rag: LocalRAG | None = None
         self.client = OpenAI(
             api_key=os.getenv("CODEFOX_API_KEY"), base_url=self.base_url
         )
@@ -45,20 +45,34 @@ class OpenRouter(BaseAPI):
         return name in self.get_tag_models()
 
     def execute(self, diff_text: str = "") -> ExecuteResponse:
-        system_prompt = PromptTemplate(self.config)
-        content = (
-            "Analyze the following git diff"
-            f"and identify potential risks:\n\n{diff_text}"
+        max_rag_chars = (
+            self.model_config.get("max_rag_chars")
+            or self.default_max_rag_chars
         )
-
-        files_context = ""
-        if not self.review_config["diff_only"]:
-            rag_chunks = self._search(diff_text, k=8)
-
-            files_context = "\n\n".join(
-                f"<file path='{c['path']}'>\n{c['text']}\n</file>"
-                for c in rag_chunks
+        max_diff_chars = (
+            self.model_config.get("max_diff_chars")
+            or self.default_max_diff_chars
+        )
+        if len(diff_text) > max_diff_chars:
+            diff_text = (
+                diff_text[:max_diff_chars]
+                + "\n\n... [diff truncated for context length]"
             )
+
+        rag_context = ""
+        if self.rag:
+            rag_context = Helper.get_files_context(
+                self.rag,
+                diff_text,
+                k=8,
+                max_rag_chars=max_rag_chars,
+            )
+
+        system_prompt = PromptTemplate(self.config)
+        context_prompt = PromptTemplate(
+            {"files_context": rag_context, "diff_text": diff_text}, "content"
+        )
+        content = context_prompt.get()
 
         completion = self.client.chat.completions.create(
             model=self.model_config["name"],
@@ -68,13 +82,7 @@ class OpenRouter(BaseAPI):
             max_completion_tokens=self.model_config["max_completion_tokens"],
             messages=[
                 {"role": "system", "content": system_prompt.get()},
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": content},
-                        {"type": "text", "text": files_context},
-                    ],
-                },
+                {"role": "user", "content": content},
             ],
         )
 
@@ -88,90 +96,37 @@ class OpenRouter(BaseAPI):
         if self.review_config["diff_only"]:
             return True, None
 
-        ignored_paths = Helper.read_codefoxignore()
+        rag_kw = {
+            "max_query_chars": self.model_config.get(
+                "rag_max_query_chars", 2000
+            ),
+        }
+        key_map = {
+            "rag_min_score": "min_score",
+            "rag_chunk_size": "chunk_size",
+            "rag_chunk_overlap": "chunk_overlap",
+            "rag_embed_batch_size": "embed_batch_size",
+            "rag_max_chunks": "max_chunks",
+            "rag_max_files": "max_files",
+            "rag_threads_embedding": "threads_embedding",
+            "rag_lazy_load": "lazy_load",
+            "rag_index_dir": "index_dir",
+        }
+        for config_key, kw_key in key_map.items():
+            if config_key in self.model_config:
+                rag_kw[kw_key] = self.model_config[config_key]
 
-        valid_files = [
-            f
-            for f in Helper.get_all_files(path_files)
-            if not any(ignored in f for ignored in ignored_paths)
-        ]
+        self.rag = LocalRAG(
+            self.model_config["embedding"],
+            files_path=path_files,
+            **rag_kw,
+        )
+        if not self.rag.load_index():
+            self.rag.build()
+            self.rag.save_index()
 
-        files: list[dict[str, Any]] = []
-        for file in track(valid_files, description="Progress read files..."):
-            try:
-                with open(file, encoding="utf-8", errors="ignore") as f:
-                    content = f.read()
-
-                files.append({"path": file, "content": content})
-            except Exception:
-                continue
-
-        try:
-            self.index = []
-            for file_entry in track(
-                files, description="Progress files processing..."
-            ):
-                chunks = self._chunk_text(file_entry["content"])
-
-                if not chunks:
-                    continue
-
-                embeddings = self._embed(chunks)
-
-                for chunk, emb in zip(chunks, embeddings):
-                    self.index.append(
-                        {
-                            "path": file_entry["path"],
-                            "text": chunk,
-                            "embedding": emb,
-                        }
-                    )
-
-            self.files = files
-            return True, None
-        except Exception as e:
-            return False, e
+        return True, None
 
     def get_tag_models(self) -> list:
         models = self.client.models.list()
         return [model.id for model in models]
-
-    def _chunk_text(self, text: str, size: int = 800) -> list[str]:
-        raw_chunks = [text[i : i + size] for i in range(0, len(text), size)]
-        return [c for c in raw_chunks if c.strip()]
-
-    def _embed(self, texts: list[str]) -> list[list[float]]:
-        clean_texts = [t for t in texts if t and t.strip()]
-
-        if not clean_texts:
-            return []
-
-        try:
-            resp = self.client.embeddings.create(
-                model=self.model_config["embedding"],
-                input=clean_texts,
-            )
-        except ValueError:
-            return []
-
-        if not resp.data:
-            return []
-
-        return [d.embedding for d in resp.data]
-
-    def _cosine(self, a, b):
-        dot = sum(x * y for x, y in zip(a, b))
-        na = math.sqrt(sum(x * x for x in a))
-        nb = math.sqrt(sum(x * x for x in b))
-        return dot / (na * nb + 1e-8)
-
-    def _search(self, query: str, k: int = 5) -> list[dict]:
-        query_emb = self._embed([query])[0]
-
-        scored = [
-            (self._cosine(query_emb, item["embedding"]), item)
-            for item in self.index
-        ]
-
-        scored.sort(key=lambda x: x[0], reverse=True)
-        return [item for _, item in scored[:k]]

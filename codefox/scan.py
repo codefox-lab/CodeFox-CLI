@@ -2,8 +2,8 @@ import os
 
 from rich import print
 from rich.console import Console
-from rich.markdown import Markdown
 from rich.errors import MarkupError
+from rich.markdown import Markdown
 from rich.markup import escape
 
 from codefox.api.base_api import BaseAPI
@@ -58,7 +58,7 @@ class Scan:
 
                 console = Console()
                 text = Markdown(response.text, code_theme="manni")
-                print(f"[green]Scan result from model:[/green]\n")
+                print("[green]Scan result from model:[/green]\n")
                 console.print(text)
             except MarkupError:
                 print(
