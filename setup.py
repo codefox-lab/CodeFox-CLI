@@ -26,6 +26,7 @@ setup(
 		"typer==0.23.1",
 		"openai==2.21.0",
 		"ollama==0.6.1",
+        "bm25s==0.3.0",
 	],
 	entry_points={
 		"console_scripts": [

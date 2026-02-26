@@ -58,9 +58,7 @@ class Scan:
 
                 console = Console()
                 text = Markdown(response.text, code_theme="manni")
-                print(
-                    f"[green]Scan result from model:[/green]\n"
-                )
+                print(f"[green]Scan result from model:[/green]\n")
                 console.print(text)
             except MarkupError:
                 print(

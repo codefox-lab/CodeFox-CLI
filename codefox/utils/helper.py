@@ -1,9 +1,12 @@
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 import git
 import yaml
+
+if TYPE_CHECKING:
+    import codefox.utils.local_rag as local_rag
 
 
 class Helper:
@@ -77,3 +80,24 @@ class Helper:
             return diff_text
         except git.exc.InvalidGitRepositoryError:
             return None
+    
+    @staticmethod
+    def get_files_context(
+        rag: "local_rag.LocalRAG", 
+        query: str, 
+        k: int = 5,
+        max_rag_chars: int = 16_000
+    ) -> str:
+        rag_chunks = rag.search(query, k=k)
+
+        total = 0
+        parts: list[str] = []
+        for c in rag_chunks:
+            block = f"<file path='{c['path']}'>\n{c['text']}\n</file>"
+            if total + len(block) > max_rag_chars and parts:
+                break
+
+            total += len(block)
+            parts.append(block)
+        
+        return "\n\n".join(parts)

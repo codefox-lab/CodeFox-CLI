@@ -1,153 +1,149 @@
-import math
-import re
-from pathlib import Path
+import faiss
+import bm25s
+import numpy as np
 
+from pathlib import Path
+from fastembed import TextEmbedding
 from rich.progress import track
 
 from codefox.utils.helper import Helper
 
-from ollama import Client
 
-# TODO: completely remake LocalRAG
 class LocalRAG:
-    def __init__(
-        self,
-        embedding_model: str,
-        files_path: str,
-        ollama_client: Client,
-        chunk_size: int = 800,
-        chunk_overlap: int = 100,
-        min_score: float | None = 0.25,
-        max_query_chars: int = 2000,
-    ):
-        self.embedding_model = embedding_model
-        self.files_path = files_path
-        self.ollama_client = ollama_client
-        self.chunk_size = chunk_size
-        self.chunk_overlap = chunk_overlap
-        self.min_score = min_score
-        self.max_query_chars = max_query_chars
-        self.index: list[dict] = []
+    default_cache_dir = ".codefox/embedding_cache/"
+    default_language = "english"
+    default_rff_k = 60
+    default_threads_embedding = None
+    default_lazy_load = False
 
-    def _chunk_text(self, text: str, size: int | None = None) -> list[str]:
-        sz = size or self.chunk_size
-        overlap = min(self.chunk_overlap, sz // 2)
-        lines = text.splitlines()
-        chunks: list[str] = []
-        current: list[str] = []
-        current_len = 0
+    def __init__(self, embedding: str, files_path: str, **kwargs):
+        self.all_files = Helper.get_all_files(files_path)
+        self.kwargs = self._get_kwargs(**kwargs)
 
-        for line in lines:
-            line_len = len(line) + 1
-            if current_len + line_len > sz and current:
-                chunks.append("\n".join(current))
-                overlap_lines: list[str] = []
-                overlap_len = 0
-                for L in reversed(current):
-                    overlap_len += len(L) + 1
-                    overlap_lines.insert(0, L)
-                    if overlap_len >= overlap:
-                        break
-                current = overlap_lines
-                current_len = overlap_len
-            current.append(line)
-            current_len += line_len
-
-        if current:
-            chunks.append("\n".join(current))
-        return [c for c in chunks if c.strip()]
-
-    def _embed(self, texts: list[str]) -> list[list[float]]:
-        clean = [t for t in texts if t and t.strip()]
-        if not clean:
-            return []
-        resp = self.ollama_client.embed(
-            model=self.embedding_model,
-            input=clean,
+        self.model = TextEmbedding(
+            embedding,
+            cache_dir=self.default_cache_dir,
+            threads=self.kwargs["threads_embedding"],
+            lazy_load=self.kwargs["lazy_load"]
         )
-        return resp.embeddings
 
-    def _cosine(self, a: list[float], b: list[float]) -> float:
-        dot = sum(x * y for x, y in zip(a, b))
-        na = math.sqrt(sum(x * x for x in a))
-        nb = math.sqrt(sum(x * x for x in b))
-        return dot / (na * nb + 1e-8)
-
-    def _query_for_embedding(self, query: str) -> str:
-        """Shorten and clean query for better embedding (e.g. diff has lots of +/- noise)."""
-        if len(query) <= self.max_query_chars:
-            return query.strip()
-        lines = query.strip().splitlines()
-        seen: set[str] = set()
-        kept: list[str] = []
-        total = 0
-        for line in lines:
-            if total >= self.max_query_chars:
-                break
-            stripped = line.strip()
-            if not stripped or stripped in seen:
-                continue
-            if stripped.startswith("+++") or stripped.startswith("---"):
-                kept.append(stripped)
-                total += len(stripped) + 1
-                continue
-            clean = re.sub(r"^[+\-]", "", stripped).strip()
-            if clean:
-                kept.append(stripped)
-                total += len(stripped) + 1
-        return "\n".join(kept) if kept else query[: self.max_query_chars]
+        self.retriever = bm25s.BM25()
+        self.files = []
+        self.index: faiss.IndexFlatL2 | None = None
+        self.chunks: list[str] = []
 
     def build(self) -> None:
-        ignored_paths = Helper.read_codefoxignore()
-        all_files = Helper.get_all_files(self.files_path)
-        valid_files = [
-            f
-            for f in all_files
-            if not any(ignored in f for ignored in ignored_paths)
-        ]
+        texts = []
 
-        self.index = []
-        for file_path in track(valid_files, description="Progress read files..."):
+        chunk_size = self.kwargs.get("chunk_size", 1000)
+        chunk_overlap = self.kwargs.get("chunk_overlap", 200)
+
+        step = chunk_size - chunk_overlap
+        if step <= 0:
+            step = chunk_size
+
+        for file in track(self.all_files):
             try:
-                content = Path(file_path).read_text(encoding="utf-8", errors="ignore")
+                path = Path(file)
+                content = path.read_text()
+
+                if not content.strip():
+                    continue
+
+                for i in range(0, len(content), step):
+                    chunk_text = content[i : i + chunk_size]
+                    
+                    texts.append(chunk_text)
+                    self.files.append({
+                        "path": file, 
+                        "text": chunk_text
+                    })
             except Exception:
                 continue
 
-            chunks = self._chunk_text(content)
-            if not chunks:
-                continue
+        corpus_tokens = bm25s.tokenize(texts, stopwords=self.kwargs["language"])
 
-            try:
-                embeddings = self._embed(chunks)
-            except Exception:
-                continue
+        self.retriever.index(corpus_tokens)
 
-            for chunk, emb in zip(chunks, embeddings):
-                self.index.append(
-                    {
-                        "path": file_path,
-                        "text": chunk,
-                        "embedding": emb,
-                    }
-                )
+        self.chunks = texts
+        vectors = list(self.model.embed(texts))
+        vectors_np = np.array(vectors).astype("float32")
 
-    def search(self, query: str, k: int = 8) -> list[dict]:
-        if not self.index:
+        dim = vectors_np.shape[1]
+        index = faiss.IndexFlatL2(dim)
+        index.add(vectors_np)
+        self.index = index
+
+    def search(self, query: str, k: int = 5) -> list[dict]:
+        if self.index is None or not self.chunks:
             return []
 
-        embed_input = self._query_for_embedding(query)
-        query_emb = self._embed([embed_input])
-        if not query_emb:
-            return []
-        query_vec = query_emb[0]
+        search_k = min(len(self.chunks), max(k * 2, 10))
 
-        scored = [
-            (self._cosine(query_vec, item["embedding"]), item)
-            for item in self.index
-        ]
-        scored.sort(key=lambda x: x[0], reverse=True)
+        if "max_query_chars" in self.kwargs:
+            query = query[:self.kwargs["max_query_chars"]]
 
-        if self.min_score is not None:
-            scored = [(s, item) for s, item in scored if s >= self.min_score]
+        q_vec = list(self.model.embed([query]))[0]
+        q_vec = np.array([q_vec]).astype("float32")
+        _, dense_ids = self.index.search(q_vec, search_k)
 
-        return [item for _, item in scored[:k]]
+        query_tokens = bm25s.tokenize([query], stopwords=self.kwargs["language"])
+        bm25_results, _ = self.retriever.retrieve(query_tokens, k=search_k)
+        sparse_ids = bm25_results[0]
+
+        rrf_scores = {}
+
+        for rank, doc_id in enumerate(dense_ids[0]):
+            if doc_id == -1:
+                continue
+            doc_id = int(doc_id)
+            rrf_scores[doc_id] = rrf_scores.get(doc_id, 0.0) + 1.0 / (
+                self.kwargs["rff_k"] + rank + 1
+            )
+
+        for rank, doc_id in enumerate(sparse_ids):
+            if isinstance(doc_id, dict):
+                doc_id = doc_id.get("id", rank)
+            doc_id = int(doc_id)
+            rrf_scores[doc_id] = rrf_scores.get(doc_id, 0.0) + 1.0 / (
+                self.kwargs["rff_k"] + rank + 1
+            )
+
+        sorted_docs = sorted(
+            rrf_scores.items(), key=lambda x: x[1], reverse=True
+        )
+        top_ids = [doc_id for doc_id, _ in sorted_docs[:k]]
+
+        return [self.files[i] for i in top_ids]
+
+    def _get_kwargs(self, **kwargs):
+        kwargs.setdefault("language", self.default_language)
+        kwargs.setdefault("rff_k", self.default_rff_k)
+        kwargs.setdefault("threads_embedding", self.default_threads_embedding)
+        kwargs.setdefault("lazy_load", self.default_lazy_load)
+        
+        kwargs.setdefault("chunk_size", 1000)
+        kwargs.setdefault("chunk_overlap", 200)
+
+        if not isinstance(kwargs["language"], str):
+            raise TypeError("Parameter 'language' must be a string (e.g., 'english', 'russian').")
+
+        if not isinstance(kwargs["rff_k"], int) or kwargs["rff_k"] <= 0:
+            raise ValueError("Parameter 'rff_k' must be a positive integer.")
+
+        if kwargs["threads_embedding"] is not None and not isinstance(kwargs["threads_embedding"], int):
+            raise TypeError("Parameter 'threads_embedding' must be an integer or None.")
+
+        if not isinstance(kwargs["lazy_load"], bool):
+            raise TypeError("Parameter 'lazy_load' must be a boolean.")
+
+        if not isinstance(kwargs["chunk_size"], int) or kwargs["chunk_size"] <= 0:
+            raise ValueError("Parameter 'chunk_size' must be a positive integer.")
+            
+        if not isinstance(kwargs["chunk_overlap"], int) or kwargs["chunk_overlap"] < 0:
+            raise ValueError("Parameter 'chunk_overlap' must be a non-negative integer.")
+            
+        if kwargs["chunk_overlap"] >= kwargs["chunk_size"]:
+            raise ValueError("Parameter 'chunk_overlap' must be strictly less than 'chunk_size' to prevent infinite looping.")
+
+        return kwargs

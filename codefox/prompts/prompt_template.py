@@ -1,14 +1,45 @@
 from typing import Any, cast
 
 import codefox.prompts.audit_system as audit_system
+import codefox.prompts.audit_content as audit_content
 from codefox.prompts.template import Template
 
 
 class PromptTemplate(Template):
-    def __init__(self, config: dict[str, Any]) -> None:
+    def __init__(
+        self, 
+        config: dict[str, Any], 
+        type_prompt: str = "system"
+    ) -> None:
         self.config = config
-
+        self.type_prompt = type_prompt
+    
     def get(self) -> str:
+        if self.type_prompt == "system":
+            return self._get_system()
+        elif self.type_prompt == "content":
+            return self._get_content()
+        
+        return ''
+
+    def _get_content(self) -> str:
+        parts: list[str] = []
+        if "file_context" in self.config["files_context"]:
+            part.append(
+                audit_content.CONTENT_RELEVANT_CONTEXT.format(
+                    files_context=self.config["files_context"]
+                )
+            )
+        
+        parts.append(
+            audit_content.CONTENT_FULL.format(
+                diff_text=self.config.get("diff_text", "")
+            )
+        )
+
+        return "\n".join(p.strip() for p in parts if p).strip()
+
+    def _get_system(self) -> str:
         ruler = self._get_config("ruler")
         review = self._get_config("review")
         prompt_cfg = self._get_config("prompt")

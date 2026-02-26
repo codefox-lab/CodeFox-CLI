@@ -7,11 +7,12 @@ from ollama import ChatResponse, Client
 from codefox.api.base_api import BaseAPI, ExecuteResponse, Response
 from codefox.prompts.prompt_template import PromptTemplate
 from codefox.utils.local_rag import LocalRAG
+from codefox.utils.helper import Helper
 
 
 class Ollama(BaseAPI):
     default_model_name = "gemma3:12b"
-    default_embedding = "nomic-embed-text"
+    default_embedding = "BAAI/bge-small-en-v1.5"
     base_url = "https://ollama.com"
     default_max_rag_chars = 4096
     default_max_diff_chars = 16_000
@@ -59,17 +60,14 @@ class Ollama(BaseAPI):
 
         rag_kw: dict = {
             "chunk_overlap": self.model_config.get("rag_chunk_overlap", 100),
-            "max_query_chars": self.model_config.get("rag_max_query_chars", 2000),
+            "max_query_chars": self.model_config.get(
+                "rag_max_query_chars", 2000
+            ),
         }
         if "rag_min_score" in self.model_config:
             rag_kw["min_score"] = self.model_config["rag_min_score"]
 
-        self.rag = LocalRAG(
-            self.model_config["embedding"],
-            path_files,
-            ollama_client=self.client,
-            **rag_kw,
-        )
+        self.rag = LocalRAG(self.model_config["embedding"], path_files, **rag_kw)
         self.rag.build()
 
         return True, None
@@ -78,76 +76,36 @@ class Ollama(BaseAPI):
         pass
 
     def execute(self, diff_text: str) -> ExecuteResponse:
-        system_prompt = PromptTemplate(self.config)
-
-        max_rag_chars = self.model_config.get("max_rag_chars") or self.default_max_rag_chars
-        max_diff_chars = self.model_config.get("max_diff_chars") or self.default_max_diff_chars
+        max_rag_chars = (
+            self.model_config.get("max_rag_chars")
+            or self.default_max_rag_chars
+        )
+        max_diff_chars = (
+            self.model_config.get("max_diff_chars")
+            or self.default_max_diff_chars
+        )
 
         if len(diff_text) > max_diff_chars:
             diff_text = (
-                diff_text[: max_diff_chars]
+                diff_text[:max_diff_chars]
                 + "\n\n... [diff truncated for context length]"
             )
 
         rag_context = ""
         if self.rag:
-            rag_chunks = self.rag.search(diff_text, k=8)
-            parts: list[str] = []
-            total = 0
-            for c in rag_chunks:
-                block = f"<file path='{c['path']}'>\n{c['text']}\n</file>"
-                if total + len(block) > max_rag_chars and parts:
-                    break
-                parts.append(block)
-                total += len(block)
-            rag_context = "\n\n".join(parts)
-            rag_context = f"""
-## RELEVANT CONTEXT
-*(Use only if needed to trace data flow. Do not analyze this section by itself.)*
-
-{rag_context}
-"""
-
-        content = f"""# DIFF AUDIT
-
-**CRITICAL:** Describe only what is in the diff. Use exact names from the diff (do not invent or misspell, e.g. Ollama not Olla). If something is not in the diff, say "not in the diff" — do not speculate.
-
-## Task
-Detect **behavior change** caused by the modified lines.
-
-## Do NOT
-- Explain the codebase or architecture
-- Summarize classes
-- Invent class/API/file names
-
-If you do not compare **OLD vs NEW** behavior → the answer is **INVALID**.
-
----
-
-## DIFF
-*Git diff with +/- markers. Only these lines changed.*
-
-```
-{diff_text}
-```
-
----
-
-## Required reasoning
-
-1. **List the changed lines**
-2. For each change:
-   - OLD behavior →
-   - NEW behavior →
-3. **What execution path** now behaves differently?
-4. **What can break?**
-
-If there is no behavioral change → say exactly: **NO BEHAVIORAL CHANGE.**
-
-{rag_context}
-"""
-        print(content)
+            rag_context = Helper.get_files_context(
+                self.rag,
+                diff_text,
+                k=8,
+                max_rag_chars=max_rag_chars
+            )
         
+        system_prompt = PromptTemplate(self.config)
+        context_prompt = PromptTemplate({
+            'files_context': rag_context, 
+            'diff_text': diff_text,
+        }, 'content')
+
         options = {}
         if self.model_config.get("temperature") is not None:
             options["temperature"] = self.model_config["temperature"]
@@ -158,7 +116,7 @@ If there is no behavioral change → say exactly: **NO BEHAVIORAL CHANGE.**
             model=self.model_config["name"],
             messages=[
                 {"role": "system", "content": system_prompt.get()},
-                {"role": "user", "content": content},
+                {"role": "user", "content": context_prompt.get()},
             ],
             options=options if options else None,
         )
