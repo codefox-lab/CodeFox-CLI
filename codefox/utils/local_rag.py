@@ -4,6 +4,7 @@ import numpy as np
 
 from pathlib import Path
 from fastembed import TextEmbedding
+from rich.console import Console
 from rich.progress import track
 
 from codefox.utils.helper import Helper
@@ -17,15 +18,20 @@ class LocalRAG:
     default_lazy_load = False
 
     def __init__(self, embedding: str, files_path: str, **kwargs):
+        self.console = Console()
+        self.console.print("[bold cyan]Initializing LocalRAG...[/bold cyan]")
+        
         self.all_files = Helper.get_all_files(files_path)
         self.kwargs = self._get_kwargs(**kwargs)
 
-        self.model = TextEmbedding(
-            embedding,
-            cache_dir=self.default_cache_dir,
-            threads=self.kwargs["threads_embedding"],
-            lazy_load=self.kwargs["lazy_load"]
-        )
+        with self.console.status("[blue]Loading TextEmbedding model...[/blue]"):
+            self.model = TextEmbedding(
+                embedding,
+                cache_dir=self.default_cache_dir,
+                threads=self.kwargs["threads_embedding"],
+                lazy_load=self.kwargs["lazy_load"]
+            )
+        self.console.print("[green]✓[/green] Model loaded successfully.")
 
         self.retriever = bm25s.BM25()
         self.files = []
@@ -33,6 +39,7 @@ class LocalRAG:
         self.chunks: list[str] = []
 
     def build(self) -> None:
+        self.console.print("[bold magenta]Starting RAG database build...[/bold magenta]")
         texts = []
 
         chunk_size = self.kwargs.get("chunk_size", 1000)
@@ -42,10 +49,10 @@ class LocalRAG:
         if step <= 0:
             step = chunk_size
 
-        for file in track(self.all_files):
+        for file in track(self.all_files, description="[cyan]Reading & chunking files...[/cyan]"):
             try:
                 path = Path(file)
-                content = path.read_text()
+                content = path.read_text(encoding="utf-8")
 
                 if not content.strip():
                     continue
@@ -60,22 +67,37 @@ class LocalRAG:
                     })
             except Exception:
                 continue
+                
+        self.console.print(f"[green]✓[/green] Created {len(texts)} chunks from {len(self.all_files)} files.")
 
-        corpus_tokens = bm25s.tokenize(texts, stopwords=self.kwargs["language"])
-
-        self.retriever.index(corpus_tokens)
+        with self.console.status("[yellow]Tokenizing and building BM25 index...[/yellow]"):
+            corpus_tokens = bm25s.tokenize(texts, stopwords=self.kwargs["language"])
+            self.retriever.index(corpus_tokens)
+        self.console.print("[green]✓[/green] BM25 lexical index built.")
 
         self.chunks = texts
-        vectors = list(self.model.embed(texts))
-        vectors_np = np.array(vectors).astype("float32")
+        vectors = []
+        
+        for vec in track(
+            self.model.embed(texts), 
+            total=len(texts), 
+            description="[blue]Generating vector embeddings...[/blue]"
+        ):
+            vectors.append(vec)
 
-        dim = vectors_np.shape[1]
-        index = faiss.IndexFlatL2(dim)
-        index.add(vectors_np)
-        self.index = index
+        with self.console.status("[magenta]Building FAISS vector index...[/magenta]"):
+            vectors_np = np.array(vectors).astype("float32")
+            dim = vectors_np.shape[1]
+            index = faiss.IndexFlatL2(dim)
+            index.add(vectors_np)
+            self.index = index
+            
+        self.console.print("[green]✓[/green] FAISS semantic index built.")
+        self.console.print("[bold green]RAG build complete and ready for queries![/bold green]\n")
 
     def search(self, query: str, k: int = 5) -> list[dict]:
         if self.index is None or not self.chunks:
+            self.console.print("[bold red]Index is empty. Please run build() first.[/bold red]")
             return []
 
         search_k = min(len(self.chunks), max(k * 2, 10))
@@ -83,37 +105,45 @@ class LocalRAG:
         if "max_query_chars" in self.kwargs:
             query = query[:self.kwargs["max_query_chars"]]
 
-        q_vec = list(self.model.embed([query]))[0]
-        q_vec = np.array([q_vec]).astype("float32")
-        _, dense_ids = self.index.search(q_vec, search_k)
+        with self.console.status("[bold cyan]Analyzing query...[/bold cyan]") as status:
+            
+            status.update("[cyan]Embedding search query...[/cyan]")
+            q_vec = list(self.model.embed([query]))[0]
+            q_vec = np.array([q_vec]).astype("float32")
+            
+            status.update("[cyan]Performing FAISS semantic search...[/cyan]")
+            _, dense_ids = self.index.search(q_vec, search_k)
 
-        query_tokens = bm25s.tokenize([query], stopwords=self.kwargs["language"])
-        bm25_results, _ = self.retriever.retrieve(query_tokens, k=search_k)
-        sparse_ids = bm25_results[0]
+            status.update("[cyan]Performing BM25 lexical search...[/cyan]")
+            query_tokens = bm25s.tokenize([query], stopwords=self.kwargs["language"])
+            bm25_results, _ = self.retriever.retrieve(query_tokens, k=search_k)
+            sparse_ids = bm25_results[0]
 
-        rrf_scores = {}
+            status.update("[cyan]Fusing results with RRF algorithm...[/cyan]")
+            rrf_scores = {}
 
-        for rank, doc_id in enumerate(dense_ids[0]):
-            if doc_id == -1:
-                continue
-            doc_id = int(doc_id)
-            rrf_scores[doc_id] = rrf_scores.get(doc_id, 0.0) + 1.0 / (
-                self.kwargs["rff_k"] + rank + 1
+            for rank, doc_id in enumerate(dense_ids[0]):
+                if doc_id == -1:
+                    continue
+                doc_id = int(doc_id)
+                rrf_scores[doc_id] = rrf_scores.get(doc_id, 0.0) + 1.0 / (
+                    self.kwargs["rff_k"] + rank + 1
+                )
+
+            for rank, doc_id in enumerate(sparse_ids):
+                if isinstance(doc_id, dict):
+                    doc_id = doc_id.get("id", rank)
+                doc_id = int(doc_id)
+                rrf_scores[doc_id] = rrf_scores.get(doc_id, 0.0) + 1.0 / (
+                    self.kwargs["rff_k"] + rank + 1
+                )
+
+            sorted_docs = sorted(
+                rrf_scores.items(), key=lambda x: x[1], reverse=True
             )
+            top_ids = [doc_id for doc_id, _ in sorted_docs[:k]]
 
-        for rank, doc_id in enumerate(sparse_ids):
-            if isinstance(doc_id, dict):
-                doc_id = doc_id.get("id", rank)
-            doc_id = int(doc_id)
-            rrf_scores[doc_id] = rrf_scores.get(doc_id, 0.0) + 1.0 / (
-                self.kwargs["rff_k"] + rank + 1
-            )
-
-        sorted_docs = sorted(
-            rrf_scores.items(), key=lambda x: x[1], reverse=True
-        )
-        top_ids = [doc_id for doc_id, _ in sorted_docs[:k]]
-
+        self.console.print(f"[green]✓ Found top {len(top_ids)} matching chunks.[/green]")
         return [self.files[i] for i in top_ids]
 
     def _get_kwargs(self, **kwargs):

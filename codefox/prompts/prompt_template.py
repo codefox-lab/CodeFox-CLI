@@ -24,18 +24,18 @@ class PromptTemplate(Template):
 
     def _get_content(self) -> str:
         parts: list[str] = []
+        parts.append(
+            audit_content.CONTENT_FULL.format(
+                diff_text=self.config.get("diff_text", "")
+            )
+        )
+
         if "file_context" in self.config["files_context"]:
             part.append(
                 audit_content.CONTENT_RELEVANT_CONTEXT.format(
                     files_context=self.config["files_context"]
                 )
             )
-        
-        parts.append(
-            audit_content.CONTENT_FULL.format(
-                diff_text=self.config.get("diff_text", "")
-            )
-        )
 
         return "\n".join(p.strip() for p in parts if p).strip()
 

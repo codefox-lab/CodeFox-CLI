@@ -106,6 +106,9 @@ class Ollama(BaseAPI):
             'diff_text': diff_text,
         }, 'content')
 
+        print(rag_context)
+        print(context_prompt.get())
+
         options = {}
         if self.model_config.get("temperature") is not None:
             options["temperature"] = self.model_config["temperature"]
