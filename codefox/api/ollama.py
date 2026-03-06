@@ -1,8 +1,9 @@
 import os
+import time
 from typing import Any
 
 import requests
-from ollama import ChatResponse, Client, pull
+from ollama import ChatResponse, Client, pull, web_fetch
 from rich import print
 from rich.progress import (
     BarColumn,
@@ -140,15 +141,70 @@ class Ollama(BaseAPI):
             options["temperature"] = self.model_config["temperature"]
         if self.model_config.get("max_tokens") is not None:
             options["num_predict"] = self.model_config["max_tokens"]
+        
+        messages = [
+            {"role": "system", "content": system_prompt.get()},
+            {"role": "user", "content": context_prompt.get()},
+        ]
+
+        print(messages)
+
+        def search_knowledge_base(query: str) -> str:
+            if not self.rag:
+                return "None RAG"
+
+            return Helper.get_files_context(
+                self.rag, 
+                query, 
+                k=16, 
+                max_rag_chars=max_rag_chars
+            )
 
         chat_response: ChatResponse = self.client.chat(
             model=self.model_config["name"],
-            messages=[
-                {"role": "system", "content": system_prompt.get()},
-                {"role": "user", "content": context_prompt.get()},
-            ],
+            messages=messages,
             options=options if options else None,
+            tools=[search_knowledge_base,],
+            think=True
         )
+
+        messages.append(chat_response.message)                                                                                                                
+        max_tool_iterations = 5                                                                                                                               
+        tool_iteration = 0                                                                                                                                    
+                                                                                                                                                            
+        while chat_response.message.tool_calls and tool_iteration < max_tool_iterations:                                                                      
+            tool_iteration += 1                                                                                                                               
+            print(chat_response.message.thinking)                                                                                                             
+            print(chat_response.message.tool_calls)                                                                                                           
+                                                                                                                                                            
+            for call in chat_response.message.tool_calls:                                                                                                     
+                if call.function.name == 'search_knowledge_base':                                                                                             
+                    result = search_knowledge_base(**call.function.arguments)                                                                                 
+                else:                                                                                                                                         
+                    result = 'Unknown tool'                                                                                                                   
+                                                                                                                                                            
+                print(call.function.name)                                                                                                                     
+                print(call.function.arguments)                                                                                                                
+                print(result)                                                                                                                                 
+                                                                                                                                                            
+                messages.append({                                                                                                                                     
+                    'role': 'tool',                                                                                                                                   
+                    'name': call.function.name,                                                                                                                       
+                    'content': str(result)                                                                                         
+                })
+                                                                                                                                        
+            chat_response: ChatResponse = self.client.chat(                                                                                                   
+                model=self.model_config["name"],                                                                                                              
+                messages=messages,                                                                                                                            
+                options=options if options else None,                                                                                                         
+                tools=[search_knowledge_base,],                                                                                                               
+                think=True                                                                                                                                    
+            )                                                                                                                                                 
+                                                                                                        
+            time.sleep(2)                                                                                                                                     
+                                                                                                                                                            
+        if tool_iteration >= max_tool_iterations:                                                                                                             
+            print("[yellow]Warning: Max tool iterations reached[/yellow]") 
 
         response = Response(chat_response.message.content or "")
         return response

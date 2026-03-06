@@ -28,12 +28,12 @@ class PromptTemplate(Template):
             )
         )
 
-        if "files_context" in self.config:
-            parts.append(
-                audit_content.CONTENT_RELEVANT_CONTEXT.format(
-                    files_context=self.config["files_context"]
-                )
-            )
+        # if "files_context" in self.config:
+        #     parts.append(
+        #         audit_content.CONTENT_RELEVANT_CONTEXT.format(
+        #             files_context=self.config["files_context"]
+        #         )
+        #     )
 
         return "\n".join(p.strip() for p in parts if p).strip()
 

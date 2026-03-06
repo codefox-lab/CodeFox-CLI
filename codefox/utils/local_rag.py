@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 
 import bm25s
+import math
+import psutil
 import faiss
 import nltk
 import numpy as np
@@ -26,6 +28,14 @@ class LocalRAG:
         self.console.print("[bold cyan]Initializing LocalRAG...[/bold cyan]")
 
         nltk.download("punkt")
+
+        ram_gb = psutil.virtual_memory().total / math.pow(1024, 3)
+        if ram_gb < 8:
+            self.default_embed_batch_size = 16
+        elif ram_gb < 16:
+            self.default_embed_batch_size = 32
+        else:
+            self.default_embed_batch_size = 64
 
         self.all_files = Helper.get_all_files(files_path)
         self.kwargs = self._get_kwargs(**kwargs)
@@ -166,35 +176,38 @@ class LocalRAG:
         self.console.print("[green]✓[/green] BM25 lexical index built.")
 
         self.chunks = texts
-        batch_size = self.kwargs.get(
-            "embed_batch_size", self.default_embed_batch_size
-        )
-        vectors = []
-
-        for i in track(
-            range(0, len(texts), batch_size),
-            total=(len(texts) + batch_size - 1) // max(batch_size, 1),
-            description=(
-                "[blue]Generating vector embeddings (batches)...[/blue]"
-            ),
-        ):
-            batch = texts[i : i + batch_size]
-            for vec in self.model.embed(batch):
-                vectors.append(vec)
+        batch_size = max(
+            self.kwargs.get(
+                "embed_batch_size", self.default_embed_batch_size
+            ), 1) 
+        index = None
 
         with self.console.status(
             "[magenta]Building FAISS vector index...[/magenta]"
         ):
-            vectors_np = np.array(vectors).astype("float32")
-            dim = vectors_np.shape[1]
-            index = faiss.IndexHNSWFlat(dim, 32)
-            index.add(vectors_np)
-            self.index = index
+
+            for i in track(
+                range(0, len(texts), batch_size),
+                total=(len(texts) + batch_size - 1) // batch_size,
+                description="[blue]Generating embeddings...[/blue]",
+            ):
+                batch = texts[i : i + batch_size]
+
+                emb = np.array(list(self.model.embed(batch)), dtype="float32")
+
+                faiss.normalize_L2(emb)
+
+                if index is None:
+                    dim = emb.shape[1]
+                    index = faiss.IndexFlatIP(dim)
+
+                index.add(emb)
+
+        self.index = index
 
         self.console.print("[green]✓[/green] FAISS semantic index built.")
         self.console.print(
-            "[bold green]RAG build complete and ready for "
-            "queries![/bold green]\n"
+            "[bold green]RAG build complete and ready for queries![/bold green]\n"
         )
 
     def search(self, query: str, k: int = 5) -> list[dict]:
