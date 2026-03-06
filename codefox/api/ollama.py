@@ -142,6 +142,8 @@ class Ollama(BaseAPI):
         if self.model_config.get("max_tokens") is not None:
             options["num_predict"] = self.model_config["max_tokens"]
         
+        options['top_p'] = 1
+        
         messages = [
             {"role": "system", "content": system_prompt.get()},
             {"role": "user", "content": context_prompt.get()},
@@ -169,7 +171,7 @@ class Ollama(BaseAPI):
         )
 
         messages.append(chat_response.message)                                                                                                                
-        max_tool_iterations = 5                                                                                                                               
+        max_tool_iterations = 25                                                                                                                               
         tool_iteration = 0                                                                                                                                    
                                                                                                                                                             
         while chat_response.message.tool_calls and tool_iteration < max_tool_iterations:                                                                      
@@ -196,13 +198,13 @@ class Ollama(BaseAPI):
             chat_response: ChatResponse = self.client.chat(                                                                                                   
                 model=self.model_config["name"],                                                                                                              
                 messages=messages,                                                                                                                            
-                options=options if options else None,                                                                                                         
-                tools=[search_knowledge_base,],                                                                                                               
+                options=options if options else None,                                                                                                      
+                tools=[search_knowledge_base,],                                                                                                         
                 think=True                                                                                                                                    
             )                                                                                                                                                 
                                                                                                         
             time.sleep(2)                                                                                                                                     
-                                                                                                                                                            
+                                                                                                                              
         if tool_iteration >= max_tool_iterations:                                                                                                             
             print("[yellow]Warning: Max tool iterations reached[/yellow]") 
 
