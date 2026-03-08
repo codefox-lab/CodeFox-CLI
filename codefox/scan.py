@@ -16,7 +16,10 @@ class Scan:
         self.model = model()
 
     def execute(self) -> None:
-        diff_text = Helper.get_diff()
+        source_branch = self.model.review_config['sourceBranch']
+        target_branch = self.model.review_config['targetBranch']
+
+        diff_text = Helper.get_diff(source_branch, target_branch)
         if not diff_text:
             print(
                 "[yellow]Repository is not found or not have change[/yellow]"

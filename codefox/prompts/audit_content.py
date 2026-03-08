@@ -1,50 +1,26 @@
-CONTENT_RELEVANT_CONTEXT = """
-## RELEVANT CONTEXT
-*(Use only if needed to trace data flow.
-Do not analyze this section by itself.)*
+CONTENT_FULL = """
+DIFF AUDIT
 
-{files_context}
-"""
-
-CONTENT_FULL = """# DIFF AUDIT & RECONNAISSANCE
-
-Analyze the behavioral change introduced by the diff.
-
-Before analysis check if any referenced symbols are missing.
-
-If definitions are missing, use the search tool to retrieve them.
-
----
-
-## DIFF
+Diff:
 {diff_text}
 
----
+Tasks:
 
-## Required analysis
+1. Tool usage (symbols searched)
+2. Changed lines
+3. Behavior change: OLD → NEW
+4. Execution path (propagation)
+5. Breakage points (new edge cases)
 
-1. Tool Usage Log
-   List which symbols were searched.
+Missing definitions → use search.
 
-2. Changed Lines
-   Provide exact modified lines.
+If still missing → NEED MORE CONTEXT
+"""
 
-3. Behavioral Mapping
+CONTENT_RELEVANT_CONTEXT = """
+RELEVANT CONTEXT
+(Use only if needed to trace data flow.
+Do not analyze this section by itself.)
 
-OLD behavior →
-NEW behavior →
-
-4. Execution Path Audit
-
-Trace how the change propagates through the system.
-
-5. Breakage Points
-
-Identify edge cases introduced by the change.
-
----
-
-If required definitions cannot be found after using tools, write:
-
-NEED MORE CONTEXT
+{files_context}
 """

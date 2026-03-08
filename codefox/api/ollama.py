@@ -136,13 +136,26 @@ class Ollama(BaseAPI):
             "content",
         )
 
+        def search_knowledge_base(query: str) -> str:
+            if not self.rag:
+                return "None RAG"
+
+            return Helper.get_files_context(
+                self.rag, 
+                query, 
+                k=18, 
+                max_rag_chars=max_rag_chars
+            )
+
         options = {}
         if self.model_config.get("temperature") is not None:
             options["temperature"] = self.model_config["temperature"]
         if self.model_config.get("max_tokens") is not None:
             options["num_predict"] = self.model_config["max_tokens"]
         
-        options['top_p'] = 1
+        tools = None                                                                
+        if self.review_config.get("tools") and self.rag:                                                                                                      
+            tools = [search_knowledge_base,]
         
         messages = [
             {"role": "system", "content": system_prompt.get()},
@@ -151,23 +164,12 @@ class Ollama(BaseAPI):
 
         print(messages)
 
-        def search_knowledge_base(query: str) -> str:
-            if not self.rag:
-                return "None RAG"
-
-            return Helper.get_files_context(
-                self.rag, 
-                query, 
-                k=16, 
-                max_rag_chars=max_rag_chars
-            )
-
         chat_response: ChatResponse = self.client.chat(
             model=self.model_config["name"],
             messages=messages,
             options=options if options else None,
-            tools=[search_knowledge_base,],
-            think=True
+            tools=tools if tools else None,
+            think=self.model_config["think_mode"]
         )
 
         messages.append(chat_response.message)                                                                                                                
@@ -180,8 +182,12 @@ class Ollama(BaseAPI):
             print(chat_response.message.tool_calls)                                                                                                           
                                                                                                                                                             
             for call in chat_response.message.tool_calls:                                                                                                     
-                if call.function.name == 'search_knowledge_base':                                                                                             
-                    result = search_knowledge_base(**call.function.arguments)                                                                                 
+                if call.function.name == 'search_knowledge_base':
+                    args = call.function.arguments                                                                                     
+                    if 'query' not in args or len(args) != 1:                                                                                                     
+                        result = 'Error: Invalid arguments for search_knowledge_base'                                                                            
+                    else:                                                                                                                                         
+                        result = search_knowledge_base(args['query'])                                                                              
                 else:                                                                                                                                         
                     result = 'Unknown tool'                                                                                                                   
                                                                                                                                                             
@@ -200,7 +206,7 @@ class Ollama(BaseAPI):
                 messages=messages,                                                                                                                            
                 options=options if options else None,                                                                                                      
                 tools=[search_knowledge_base,],                                                                                                         
-                think=True                                                                                                                                    
+                think=self.model_config["think_mode"]                                                                                                                                    
             )                                                                                                                                                 
                                                                                                         
             time.sleep(2)                                                                                                                                     
