@@ -2,10 +2,13 @@ import json
 from pathlib import Path
 
 import bm25s
-import faiss
+import math
+import psutil
 import nltk
 import numpy as np
 from fastembed import TextEmbedding
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, PointStruct, VectorParams
 from rich.console import Console
 from rich.progress import track
 
@@ -15,6 +18,7 @@ from codefox.utils.helper import Helper
 class LocalRAG:
     default_cache_dir = ".codefox/embedding_cache/"
     default_index_dir = ".codefox/rag_index/"
+    default_collection_name = "codefox_rag"
     default_language = "english"
     default_rff_k = 60
     default_threads_embedding = None
@@ -26,6 +30,14 @@ class LocalRAG:
         self.console.print("[bold cyan]Initializing LocalRAG...[/bold cyan]")
 
         nltk.download("punkt")
+
+        ram_gb = psutil.virtual_memory().total / math.pow(1024, 3)
+        if ram_gb < 8:
+            self.default_embed_batch_size = 16
+        elif ram_gb < 16:
+            self.default_embed_batch_size = 32
+        else:
+            self.default_embed_batch_size = 64
 
         self.all_files = Helper.get_all_files(files_path)
         self.kwargs = self._get_kwargs(**kwargs)
@@ -43,25 +55,29 @@ class LocalRAG:
 
         self.retriever = bm25s.BM25()
         self.files: list[dict] = []
-        self.index: faiss.IndexFlatL2 | None = None
+        self.client: QdrantClient | None = None
         self.chunks: list[str] = []
         self.embedding_name = embedding
         self.files_path = files_path
+        self.collection_name = self.default_collection_name
 
     def _index_dir(self) -> Path:
         return Path(self.kwargs.get("index_dir", self.default_index_dir))
 
+    def _qdrant_path(self) -> Path:
+        return self._index_dir() / "qdrant"
+
     def load_index(self) -> bool:
         idx_dir = self._index_dir()
         meta_path = idx_dir / "meta.json"
-        faiss_path = idx_dir / "faiss.index"
         chunks_path = idx_dir / "chunks.json"
         files_path = idx_dir / "files.json"
+        qdrant_path = self._qdrant_path()
         if (
             not meta_path.exists()
-            or not faiss_path.exists()
             or not chunks_path.exists()
             or not files_path.exists()
+            or not qdrant_path.exists()
         ):
             return False
         try:
@@ -72,7 +88,9 @@ class LocalRAG:
                 or meta.get("files_path") != self.files_path
             ):
                 return False
-            self.index = faiss.read_index(str(faiss_path))
+            self.client = QdrantClient(path=str(qdrant_path))
+            if not self.client.collection_exists(self.collection_name):
+                return False
             with open(chunks_path, encoding="utf-8") as f:
                 self.chunks = json.load(f)
             with open(files_path, encoding="utf-8") as f:
@@ -87,11 +105,10 @@ class LocalRAG:
             return False
 
     def save_index(self) -> None:
-        if self.index is None or not self.chunks or not self.files:
+        if self.client is None or not self.chunks or not self.files:
             return
         idx_dir = self._index_dir()
         idx_dir.mkdir(parents=True, exist_ok=True)
-        faiss.write_index(self.index, str(idx_dir / "faiss.index"))
         with open(idx_dir / "chunks.json", "w", encoding="utf-8") as f:
             json.dump(self.chunks, f, ensure_ascii=False)
         with open(idx_dir / "files.json", "w", encoding="utf-8") as f:
@@ -166,44 +183,75 @@ class LocalRAG:
         self.console.print("[green]✓[/green] BM25 lexical index built.")
 
         self.chunks = texts
-        batch_size = self.kwargs.get(
-            "embed_batch_size", self.default_embed_batch_size
-        )
-        vectors = []
+        batch_size = max(
+            self.kwargs.get(
+                "embed_batch_size", self.default_embed_batch_size
+            ), 1)
+        idx_dir = self._index_dir()
+        idx_dir.mkdir(parents=True, exist_ok=True)
+        qdrant_path = self._qdrant_path()
+        self.client = QdrantClient(path=str(qdrant_path))
 
-        for i in track(
-            range(0, len(texts), batch_size),
-            total=(len(texts) + batch_size - 1) // max(batch_size, 1),
-            description=(
-                "[blue]Generating vector embeddings (batches)...[/blue]"
-            ),
-        ):
-            batch = texts[i : i + batch_size]
-            for vec in self.model.embed(batch):
-                vectors.append(vec)
+        if self.client.collection_exists(self.collection_name):
+            self.client.delete_collection(self.collection_name)
 
         with self.console.status(
-            "[magenta]Building FAISS vector index...[/magenta]"
+            "[magenta]Building Qdrant vector index...[/magenta]"
         ):
-            vectors_np = np.array(vectors).astype("float32")
-            dim = vectors_np.shape[1]
-            index = faiss.IndexHNSWFlat(dim, 32)
-            index.add(vectors_np)
-            self.index = index
+            dim: int | None = None
+            for i in track(
+                range(0, len(texts), batch_size),
+                total=(len(texts) + batch_size - 1) // batch_size,
+                description="[blue]Generating embeddings...[/blue]",
+            ):
+                batch = texts[i : i + batch_size]
+                emb = np.array(list(self.model.embed(batch)), dtype="float32")
 
-        self.console.print("[green]✓[/green] FAISS semantic index built.")
+                if dim is None:
+                    dim = emb.shape[1]
+                    self.client.create_collection(
+                        collection_name=self.collection_name,
+                        vectors_config=VectorParams(
+                            size=dim, distance=Distance.COSINE
+                        ),
+                    )
+
+                points = [
+                    PointStruct(
+                        id=j,
+                        vector=vec.tolist(),
+                        payload={"path": self.files[j]["path"]},
+                    )
+                    for j, vec in enumerate(emb, start=i)
+                ]
+                self.client.upsert(
+                    collection_name=self.collection_name,
+                    points=points,
+                )
+
+        self.console.print("[green]✓[/green] Qdrant semantic index built.")
         self.console.print(
-            "[bold green]RAG build complete and ready for "
-            "queries![/bold green]\n"
+            "[bold green]RAG build complete and ready for queries![/bold green]\n"
         )
 
     def search(self, query: str, k: int = 5) -> list[dict]:
-        if self.index is None or not self.chunks:
+        if self.client is None or not self.chunks:
             self.console.print(
                 "[bold red]Index is empty. "
                 "Please run build() first.[/bold red]"
             )
             return []
+        
+        if query.startswith("class "):
+            name = query.split()[1]
+
+            matches = [
+                i for i, chunk in enumerate(self.chunks)
+                if f"class {name}" in chunk
+            ]
+
+            if matches:
+                return [self.files[i] for i in matches[:k]]
 
         search_k = min(len(self.chunks), max(k * 2, 10))
 
@@ -215,10 +263,15 @@ class LocalRAG:
         ) as status:
             status.update("[cyan]Embedding search query...[/cyan]")
             q_vec = list(self.model.embed([query]))[0]
-            q_vec = np.array([q_vec]).astype("float32")
 
-            status.update("[cyan]Performing FAISS semantic search...[/cyan]")
-            _, dense_ids = self.index.search(q_vec, search_k)
+            status.update("[cyan]Performing Qdrant semantic search...[/cyan]")
+            dense_results = self.client.query_points(
+                collection_name=self.collection_name,
+                query=q_vec.tolist(),
+                limit=search_k,
+            )
+
+            dense_ids = [r.id for r in dense_results.points]
 
             status.update("[cyan]Performing BM25 lexical search...[/cyan]")
             query_tokens = bm25s.tokenize(
@@ -230,10 +283,9 @@ class LocalRAG:
             status.update("[cyan]Fusing results with RRF algorithm...[/cyan]")
             rrf_scores: dict[int, float] = {}
 
-            for rank, doc_id in enumerate(dense_ids[0]):
-                if doc_id == -1:
-                    continue
+            for rank, doc_id in enumerate(dense_ids):
                 doc_id = int(doc_id)
+
                 rrf_scores[doc_id] = rrf_scores.get(doc_id, 0.0) + 1.0 / (
                     self.kwargs["rff_k"] + rank + 1
                 )
@@ -261,6 +313,7 @@ class LocalRAG:
         self.console.print(
             f"[green]✓ Found top {len(top_ids)} matching chunks.[/green]"
         )
+
         return [self.files[i] for i in top_ids]
 
     def _get_kwargs(self, **kwargs):
@@ -269,8 +322,8 @@ class LocalRAG:
         kwargs.setdefault("threads_embedding", self.default_threads_embedding)
         kwargs.setdefault("lazy_load", self.default_lazy_load)
 
-        kwargs.setdefault("chunk_size", 1000)
-        kwargs.setdefault("chunk_overlap", 200)
+        kwargs.setdefault("chunk_size", 300)
+        kwargs.setdefault("chunk_overlap", 50)
         kwargs.setdefault("embed_batch_size", self.default_embed_batch_size)
         kwargs.setdefault("min_score", None)
         kwargs.setdefault("max_chunks", None)

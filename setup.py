@@ -15,7 +15,7 @@ setup(
 	packages=find_packages(),
 	include_package_data=True,
 	install_requires=[
-		"faiss-cpu>=1.7.4",
+		"qdrant-client>=1.7.0",
 		"fastembed>=0.3.0",
 		"gitpython==3.1.46",
 		"google-genai==1.63.0",

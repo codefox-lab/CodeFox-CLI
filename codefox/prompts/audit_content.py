@@ -1,47 +1,26 @@
-CONTENT_RELEVANT_CONTEXT = """
-## RELEVANT CONTEXT
-*(Use only if needed to trace data flow.
-Do not analyze this section by itself.)*
+CONTENT_FULL = """
+DIFF AUDIT
 
-{files_context}
+Diff:
+{diff_text}
+
+Tasks:
+
+1. Tool usage (symbols searched)
+2. Changed lines
+3. Behavior change: OLD → NEW
+4. Execution path (propagation)
+5. Breakage points (new edge cases)
+
+Missing definitions → use search.
+
+If still missing → NEED MORE CONTEXT
 """
 
-CONTENT_FULL = """# DIFF AUDIT
+CONTENT_RELEVANT_CONTEXT = """
+RELEVANT CONTEXT
+(Use only if needed to trace data flow.
+Do not analyze this section by itself.)
 
-**CRITICAL:** Describe only what is in the diff. Use exact names from the diff
-(do not invent or misspell, e.g. Ollama not Olla). If something is not in the
-diff, say "not in the diff" — do not speculate.
-
-## Task
-Detect **behavior change** caused by the modified lines.
-
-## Do NOT
-- Explain the codebase or architecture
-- Summarize classes
-- Invent class/API/file names
-
-If you do not compare **OLD vs NEW** behavior → the answer is **INVALID**.
-
----
-
-## DIFF
-*Git diff with +/- markers. Only these lines changed.*
-
-```
-{diff_text}
-```
-
----
-
-## Required reasoning
-
-1. **List the changed lines**
-2. For each change:
-   - OLD behavior →
-   - NEW behavior →
-3. **What execution path** now behaves differently?
-4. **What can break?**
-
-If there is no behavioral change → say exactly: **NO BEHAVIORAL CHANGE.**
-
+{files_context}
 """

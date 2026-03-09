@@ -69,6 +69,15 @@ class BaseAPI(abc.ABC):
 
         if "diff_only" not in review_config:
             review_config["diff_only"] = False
+        
+        if "sourceBranch" not in review_config:
+            review_config["sourceBranch"] = None
+        
+        if "targetBranch" not in review_config:
+            review_config["targetBranch"] = None
+
+        if "tools" not in review_config:
+            review_config["tools"] = False
 
         return review_config
 
@@ -85,6 +94,11 @@ class BaseAPI(abc.ABC):
             "max_tokens"
         ):
             model_config["max_tokens"] = None
+        
+        if "think_mode" not in model_config or not model_config.get(
+            "think_mode"
+        ):
+            model_config["think_mode"] = False
 
         if "max_completion_tokens" not in model_config or not model_config.get(
             "max_completion_tokens"

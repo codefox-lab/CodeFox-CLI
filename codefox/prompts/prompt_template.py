@@ -1,3 +1,5 @@
+import hashlib
+
 from typing import Any, cast
 
 import codefox.prompts.audit_content as audit_content
@@ -35,7 +37,10 @@ class PromptTemplate(Template):
                 )
             )
 
-        return "\n".join(p.strip() for p in parts if p).strip()
+        prompt = self._join(parts)
+        checksum = hashlib.sha256(prompt.encode()).hexdigest()[:10]
+
+        return f"{prompt}\n\n<!-- prompt:{checksum} -->"
 
     def _get_system(self) -> str:
         ruler = self._get_config("ruler")
@@ -104,12 +109,29 @@ class PromptTemplate(Template):
         if baseline.get("enable"):
             parts.append(audit_system.SYSTEM_BASELINE_MODE)
 
+        review_policy = ""
+        if review.get("suggest_fixes"):
+            review_policy += f"- Auto-fix: {review.get("suggest_fixes")}\n"
+        else:
+            review_policy += f"- Auto-fix: DO NOT offer auto-fixes\n"
+        
+        if review.get("severity"):
+            review_policy += f"- Minimum severity: {review.get("severity")}\n"
+        
+        if review.get("max_issues"):
+            review_policy += f"- Max findings: {review.get("max_issues")}\n"
+        
+        if review.get("diff_only"):
+            review_policy += f"- Diff-only mode: {review.get("diff_only")}"
+
         parts.append(f"""
 ## REVIEW POLICY
-- **Minimum severity:** {review.get("severity")}
-- **Max findings:** {review.get("max_issues")}
-- **Auto-fix:** {review.get("suggest_fixes")}
-- **Diff-only mode:** {review.get("diff_only")}
+{review_policy}
+""")
+
+        parts.append("""
+Do not show internal reasoning.
+Report only final findings.
 """)
 
         severity = review.get("severity")
@@ -126,9 +148,17 @@ Limit the output to the **{review.get("max_issues")}** most critical findings.
         if prompt_cfg.get("extra"):
             parts.append(prompt_cfg["extra"])
 
-        return "\n".join(p.strip() for p in parts if p).strip()
+        prompt = self._join(parts)
+        checksum = hashlib.sha256(prompt.encode()).hexdigest()[:10]
+
+        return f"{prompt}\n\n<!-- prompt:{checksum} -->"
 
     def _get_config(self, key: str) -> dict[str, Any]:
         if key not in self.config:
             raise ValueError(f"Missing required config field: '{key}'")
         return cast(dict[str, Any], self.config[key])
+
+    def _join(self, parts: list[str]) -> str:
+        return "\n\n".join(
+            p.strip() for p in parts if p and p.strip()
+        )

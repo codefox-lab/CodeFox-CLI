@@ -85,10 +85,17 @@ class Helper:
         return all_files_to_upload
 
     @staticmethod
-    def get_diff() -> str | None:
+    def get_diff(
+        source_branch: str | None = None,
+        target_branch: str | None = None
+    ) -> str | None:
         try:
             repo = git.Repo(".")
-            diff_text: str = repo.git.diff(repo.head.commit)
+
+            if not source_branch:
+                source_branch = repo.head.commit
+
+            diff_text: str = repo.git.diff(source_branch, target_branch)
             return diff_text
         except git.exc.InvalidGitRepositoryError:
             return None
