@@ -16,7 +16,7 @@ def scan(
     manager = CLIManager(
         command="scan",
         args={
-            "ci": ci,
+            "ci": bool(ci),
             "sourceBranch": sourceBranch,
             "targetBranch": targetBranch,
         }

@@ -66,7 +66,7 @@ class Scan(BaseCLI):
 
         print("[yellow]Waiting for model response...[/yellow]")
 
-        if self.args.get("ci", False):
+        if not self.args.get("ci", False):
             self._classic_response_answer(diff_text)
             return
         
