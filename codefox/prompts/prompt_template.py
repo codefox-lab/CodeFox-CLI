@@ -2,8 +2,8 @@ import hashlib
 
 from typing import Any, cast
 
-import codefox.prompts.audit_content as audit_content
-import codefox.prompts.audit_system as audit_system
+import codefox.prompts.audit.audit_content as audit_content
+import codefox.prompts.audit.audit_system as audit_system
 from codefox.prompts.template import Template
 
 

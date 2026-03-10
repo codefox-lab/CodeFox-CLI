@@ -6,10 +6,10 @@ from dotenv import load_dotenv
 from rich import print
 
 from codefox.api.model_enum import ModelEnum
-from codefox.init import Init
-from codefox.list import List
-from codefox.scan import Scan
-from codefox.clean import Clean
+from codefox.cli.init import Init
+from codefox.cli.list import List
+from codefox.cli.scan import Scan
+from codefox.cli.clean import Clean
 from codefox.api.base_api import BaseAPI
 from codefox.utils.helper import Helper
 

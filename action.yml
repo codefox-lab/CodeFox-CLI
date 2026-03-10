@@ -46,6 +46,6 @@ runs:
       shell: bash
       run: |
         codefox scan \
-          --targetbranch ${{ github.base_ref }} \
-          --sourcebranch ${{ github.head_ref }} \
+          --target-branch ${{ github.base_ref }} \
+          --source-branch ${{ github.head_ref }} \
           --ci

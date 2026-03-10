@@ -7,8 +7,8 @@ from rich.errors import MarkupError
 from rich.markdown import Markdown
 from rich.markup import escape
 
-from codefox.list import List
-from codefox.base_cli import BaseCLI
+from codefox.cli.list import List
+from codefox.cli.base_cli import BaseCLI
 from codefox.api.base_api import BaseAPI
 from codefox.utils.helper import Helper
 from codefox.utils.github_bot import GitHubBot

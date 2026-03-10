@@ -7,7 +7,7 @@ from rich.prompt import Confirm, Prompt
 
 from codefox.api.base_api import BaseAPI
 from codefox.api.model_enum import ModelEnum
-from codefox.base_cli import BaseCLI
+from codefox.cli.base_cli import BaseCLI
 
 
 class Init(BaseCLI):

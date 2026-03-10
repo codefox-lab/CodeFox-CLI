@@ -4,7 +4,7 @@ from typing import Any
 
 from codefox.utils.local_rag import LocalRAG
 from codefox.api.base_api import BaseAPI
-from codefox.base_cli import BaseCLI
+from codefox.cli.base_cli import BaseCLI
 
 
 class Clean(BaseCLI):
