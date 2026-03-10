@@ -8,6 +8,7 @@ app = typer.Typer()
 
 @app.command()
 def scan(
+    ci: str = typer.Option(False, help="CI mode"),
     sourceBranch: str = typer.Option(None, help="Source branch"),
     targetBranch: str = typer.Option(None, help="Target branch"),
 ):
@@ -15,6 +16,7 @@ def scan(
     manager = CLIManager(
         command="scan",
         args={
+            "ci": ci,
             "sourceBranch": sourceBranch,
             "targetBranch": targetBranch,
         }
