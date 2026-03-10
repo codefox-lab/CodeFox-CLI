@@ -13,28 +13,39 @@ class Clean(BaseCLI):
         self.args = args
 
     def execute(self) -> None:
-        cache_dir = self._get_dir_cache()
-        if not cache_dir or not cache_dir.exists():
+        type_cache = self.args.get("typeCache")
+        if type_cache != "all":
+            path = self._get_dir_cache(type_cache)
+            self._clean_dir(path)
+            return
+        
+        if type_cache == "all":
+            for type_cache in ["rag", "embedding",]:
+                path = self._get_dir_cache(type_cache)
+                self._clean_dir(path)
+            return
+        
+        print("Sorry argument invalid. Use next params: all, rag, embedding'")
+    
+    def _clean_dir(self, path: Path | None) -> None:
+        if not path or not path.exists():
             print("Sorry but not found cache dir")
             return
         
-        if not cache_dir.is_dir():
+        if not path.is_dir():
             print("Sorry but current path is not dir")
             return
         
-        if cache_dir in [Path("/"), Path.home()]:
+        if path in [Path("/"), Path.home()]:
             raise ValueError("Refusing to delete dangerous directory")
         
         try:
-            shutil.rmtree(cache_dir)
-            print(f"Cache directory removed: {cache_dir}")
+            shutil.rmtree(path)
+            print(f"Cache directory removed: {path}")
         except Exception as e:
             print(f"Failed to remove cache dir: {e}")
-
-        return
     
-    def _get_dir_cache(self) -> Path | None:
-        type_cache = self.args.get("typeCache")
+    def _get_dir_cache(self, type_cache: str) -> Path | None:
         if type_cache == "embedding":
             return Path(
                 self._get_embedding_cache()

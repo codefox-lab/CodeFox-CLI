@@ -41,7 +41,7 @@ def list(
 
 @app.command()
 def clean(
-    typeCache: str = typer.Option("rag", help="Cache type")
+    typeCache: str = typer.Option("all", help="Cache type")
 ):
     """Clean cache"""
     manager = CLIManager(
