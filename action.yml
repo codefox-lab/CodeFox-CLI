@@ -48,4 +48,4 @@ runs:
         codefox scan \
           --targetbranch ${{ github.base_ref }} \
           --sourcebranch ${{ github.head_ref }} \
-          --ci true
+          --ci
