@@ -93,14 +93,18 @@ class Ollama(BaseAPI):
             if config_key in self.model_config:
                 rag_kw[kw_key] = self.model_config[config_key]
 
-        self.rag = LocalRAG(
-            self.model_config["embedding"], files_path=path_files, **rag_kw
-        )
-        if not self.rag.load_index():
-            self.rag.build()
-            self.rag.save_index()
-
-        return True, None
+        try:
+            self.rag = LocalRAG(
+                self.model_config["embedding"],
+                files_path=path_files,
+                **rag_kw,
+            )
+            if not self.rag.load_index():
+                self.rag.build()
+                self.rag.save_index()
+            return True, None
+        except Exception as e:
+            return False, f"LocalRAG error: {str(e)}"
 
     def remove_files(self):
         pass
@@ -197,7 +201,7 @@ class Ollama(BaseAPI):
                 model=self.model_config["name"],                                                                                                              
                 messages=messages,                                                                                                                            
                 options=options if options else None,                                                                                                      
-                tools=[search_knowledge_base,],                                                                                                         
+                tools=tools if tools else None,                                                                                                         
                 think=self.model_config["think_mode"]                                                                                                                                    
             )                                                                                                                                                 
                                                                                                         

@@ -1,4 +1,5 @@
 import os
+import time
 from typing import Any
 
 from google import genai
@@ -11,7 +12,7 @@ from codefox.utils.local_rag import LocalRAG
 
 
 class Gemini(BaseAPI):
-    default_model_name = "gemini-2.0-flash"
+    default_model_name = "gemini-2.5-flash"
     default_embedding = "BAAI/bge-small-en-v1.5"
     default_max_rag_chars = 4096
     default_max_diff_chars = 500_000
@@ -108,23 +109,116 @@ class Gemini(BaseAPI):
             rag_context = Helper.get_files_context(
                 self.rag,
                 diff_text,
-                k=8,
+                k=12,
                 max_rag_chars=max_rag_chars,
+            )
+        
+        def search_knowledge_base(query: str) -> str:
+            if not self.rag:
+                return "None RAG"
+
+            return Helper.get_files_context(
+                self.rag, 
+                query, 
+                k=18,
+                max_rag_chars=max_rag_chars
             )
 
         system_prompt = PromptTemplate(self.config)
         context_prompt = PromptTemplate(
             {"files_context": rag_context, "diff_text": diff_text}, "content"
         )
-        content = context_prompt.get()
+
+        contents = [
+            types.Content(
+                role="user", parts=[
+                    types.Part(text=context_prompt.get())
+                ]
+            )
+        ]
+
+        tools = [
+            self._get_tools()
+        ]
 
         response = self.client.models.generate_content(
             model=self.model_config["name"],
-            contents=content,
+            contents=contents,
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt.get(),
                 temperature=self.model_config["temperature"],
                 max_output_tokens=self.model_config["max_tokens"],
+                tools=tools,
+                tool_config=types.ToolConfig(
+                function_calling_config=types.FunctionCallingConfig(
+                        mode="ANY",
+                    )
+                )
             ),
         )
+
+        contents.append(response.candidates[0].content)
+
+        max_tool_iterations = 25                                                                                                                               
+        tool_iteration = 0
+
+        while tool_iteration < max_tool_iterations:
+            part = response.candidates[0].content.parts[0]
+            if part.function_call:
+                function_call = part.function_call
+                print(f"Iteration {tool_iteration}: Calling {function_call.name}")
+                
+                if function_call.name == "search_knowledge_base":                                                                                                                                                         
+                     query = function_call.args.get("query", "")                                                                                                                                                           
+                     result_data = {"result": search_knowledge_base(query)}                                                                                                                                                
+                else:                                                                                                                                     
+                    result_data = {"result": f"Error: Tool {function_call.name} is not supported."}     
+
+                function_response_part = types.Part.from_function_response(
+                    name=function_call.name,
+                    response=result_data
+                )
+
+                contents.append(types.Content(role="user", parts=[function_response_part]))
+                
+                tool_iteration += 1
+
+                response = self.client.models.generate_content(
+                    model=self.model_config["name"],
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_prompt.get(),
+                        tools=tools,
+                        temperature=self.model_config["temperature"],
+                        max_output_tokens=self.model_config["max_tokens"]
+                    ),
+                )
+
+                time.sleep(2)
+            else:
+                break
+            
+
         return Response(text=response.text or "")
+
+    def _get_tools(self) -> types.Tool:
+        search_knowledge_base_function = {
+            "name": "search_knowledge_base",
+            "description": "Search the internal knowledge base using semantic retrieval (RAG) and return the most relevant context passages for the given query.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Natural language query used to search the knowledge base for relevant information or context.",
+                    },
+                },
+                "required": ["query"],
+            }
+        }
+
+        return types.Tool(
+            function_declarations=[
+                search_knowledge_base_function,
+            ]
+        )
