@@ -1,3 +1,39 @@
+# ⚠️ Documentation Notice
+
+This file is **no longer the primary documentation source**.
+
+The **official and actively maintained documentation** has been moved to the GitHub Wiki:
+
+👉 https://github.com/codefox-lab/CodeFox-CLI/wiki
+
+Please refer to the Wiki for:
+
+- installation guides
+- configuration reference
+- CLI commands
+- GitHub Actions integration
+- examples and usage guides
+
+The Wiki allows documentation to be updated independently from the main repository and provides better navigation across pages, which is a common approach used in many GitHub projects. :contentReference[oaicite:0]{index=0}
+
+---
+
+## Quick Links
+
+- 📖 **Documentation Home**  
+  https://github.com/codefox-lab/CodeFox-CLI/wiki
+
+- ⚙️ **Configuration Guide**  
+  https://github.com/codefox-lab/CodeFox-CLI/wiki/Configurations
+
+- 💻 **CLI Commands**  
+  https://github.com/codefox-lab/CodeFox-CLI/wiki/CLI-commands
+
+- 🚀 **GitHub Actions**  
+  https://github.com/codefox-lab/CodeFox-CLI/wiki/GitHub-Action
+
+---
+
 # ⚙️ `.codefox.yml` Configuration
 
 The `.codefox.yml` file allows you to configure the analysis behavior, model selection, review format, and the AI provider (Gemini, Ollama, OpenRouter).

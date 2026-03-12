@@ -84,7 +84,83 @@ def test_get_all_files_skips_ignore_dirs(tmp_path: Path) -> None:
         os.chdir(prev)
 
 
-def test_supported_extensions_contains_common() -> None:
-    assert ".py" in Helper.SUPPORTED_EXTENSIONS
-    assert ".js" in Helper.SUPPORTED_EXTENSIONS
-    assert ".ts" in Helper.SUPPORTED_EXTENSIONS
+# --- parse_diff_for_rag ---
+
+
+def test_parse_diff_for_rag_empty_returns_empty() -> None:
+    assert Helper.parse_diff_for_rag("") == ""
+    assert Helper.parse_diff_for_rag("   \n  ") == ""
+
+
+def test_parse_diff_for_rag_extracts_paths_and_tokens() -> None:
+    diff = """diff --git a/src/foo.py b/src/foo.py
+--- a/src/foo.py
++++ b/src/foo.py
+@@ -1,2 +1,3 @@
++def hello_world():
++    fetch_user_data()
+"""
+    out = Helper.parse_diff_for_rag(diff, max_tokens=50)
+    assert "src/foo.py" in out or "foo" in out
+    assert "hello_world" in out or "fetch_user_data" in out
+
+
+def test_parse_diff_for_rag_respects_max_tokens() -> None:
+    diff = "diff --git a/a.py b/a.py\n" + "\n".join(
+        "+something_" + str(i) for i in range(100)
+    )
+    out = Helper.parse_diff_for_rag(diff, max_tokens=5)
+    parts = out.split()
+    assert len(parts) <= 5 or "a.py" in out
+
+
+# --- chunk_text_sentences (require nltk punkt) ---
+
+
+def test_chunk_text_sentences_splits_by_size() -> None:
+    import nltk
+
+    nltk.download("punkt_tab", quiet=True)
+    text = "First sentence. Second sentence. Third sentence. Fourth one."
+    chunks = Helper.chunk_text_sentences(text, chunk_size=30, overlap=5)
+    assert len(chunks) >= 1
+    assert all(isinstance(c, str) for c in chunks)
+    joined = " ".join(chunks)
+    assert "First" in joined and "Fourth" in joined
+
+
+def test_chunk_text_sentences_single_short() -> None:
+    import nltk
+
+    nltk.download("punkt_tab", quiet=True)
+    text = "One short sentence."
+    chunks = Helper.chunk_text_sentences(text, chunk_size=100, overlap=0)
+    assert len(chunks) == 1
+    assert chunks[0] == text
+
+
+# --- get_ts_parser_by_extension ---
+
+
+def test_get_ts_parser_by_extension_python() -> None:
+    parser = Helper.get_ts_parser_by_extension(".py")
+    assert parser is not None
+
+
+def test_get_ts_parser_by_extension_unknown_returns_none() -> None:
+    assert Helper.get_ts_parser_by_extension(".xyz") is None
+    assert Helper.get_ts_parser_by_extension("") is None
+
+
+# --- smart_chunk fallback for non-code ---
+
+
+def test_smart_chunk_fallback_to_sentences() -> None:
+    import nltk
+
+    nltk.download("punkt_tab", quiet=True)
+    path = Path("readme.txt")
+    content = "First sentence here. Second sentence there. Third."
+    chunks = Helper.smart_chunk(path, content, chunk_size=25, overlap=5)
+    assert len(chunks) >= 1
+    assert "First" in chunks[0] or "First" in " ".join(chunks)

@@ -11,8 +11,16 @@
   <a href="https://github.com/URLbug/CodeFox-CLI/actions?query=branch%3Amain"><img src="https://github.com/URLbug/CodeFox-CLI/workflows/CI/badge.svg" alt="CI" /></a>
   <a href="https://github.com/URLbug/CodeFox-CLI/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License" /></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-green.svg" alt="Python 3.11+" /></a>
-  <a href="https://github.com/URLbug/CodeFox-CLI/blob/main/WIKI.md"><img src="https://img.shields.io/badge/docs-WIKI-blue?logo=readme" alt="Wiki" /></a>
+  <a href="https://github.com/codefox-lab/CodeFox-CLI/wiki"><img src="https://img.shields.io/badge/docs-WIKI-blue?logo=readme" alt="Wiki" /></a>
+  <a href="https://pepy.tech/projects/codefox"><img src="https://static.pepy.tech/personalized-badge/codefox?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads" alt="PyPI Downloads"></a>
 </p>
+
+<p align="center">
+  📚 <a href="https://github.com/codefox-lab/CodeFox-CLI/wiki">Documentation</a> •
+  🚀 <a href="#-quick-start">Quick Start</a> •
+  🐛 <a href="https://github.com/URLbug/CodeFox-CLI/issues">Report Issue</a>
+</p>
+
 
 ## 🦊 Overview
 
@@ -104,14 +112,14 @@ Specifies paths that should not be uploaded to the File Store.
 
 **Model settings:** `./.codefox.yml`
 Used for fine-grained configuration of the analysis behavior and model parameters (such as model selection, temperature, review rules, baseline, and prompts).
-For detailed configuration options and examples, see [**WIKI.md**](WIKI.md).
+For detailed configuration options and examples, see [**WIKI**](https://github.com/codefox-lab/CodeFox-CLI/wiki).
 
 Example config used in the demo above (Ollama + qwen3-coder):
 
 ```yaml
 provider: ollama
 model:
-  name: qwen3-coder:30b
+  name: qwen3.5:9b
   temperature: 0.5
   max_tokens: 4000
 review:
@@ -137,7 +145,7 @@ Stores the API token for the model. This file is used by the CLI for authenticat
 
 ## 📚 Documentation
 
-**Full configuration reference and examples:** [**WIKI.md**](https://github.com/URLbug/CodeFox-CLI/blob/main/WIKI.md) - provider settings, model options, review rules, prompts, and more.
+**Full configuration reference and examples:** [**WIKI**](https://github.com/codefox-lab/CodeFox-CLI/wiki) - provider settings, model options, review rules, prompts, and more.
 
 ---
 
@@ -146,9 +154,10 @@ Stores the API token for the model. This file is used by the CLI for authenticat
 | Command   | Description                                                                                          |
 | --------- | ---------------------------------------------------------------------------------------------------- |
 | `init`    | Saves the API key locally and creates a `.codefoxignore` and `.codefox.yml` file in the current directory.       |
-| `list`    | Shows the full list of models available for the current provider (Gemini, Ollama, or OpenRouter) from `.codefox.yml`. |
+| `list`    | Shows the full list of models available for the current provider (Gemini, Ollama, or OpenRouter) and embeddings (fastembed) from `.codefox.yml`. |
 | `scan`    | Collects changes from the `git diff`, uploads files to the File Store, and sends requests to the configured model. |
-| `version` | Displays the current CodeFox CLI version.                                                            |
+| `version` | Displays the current CodeFox CLI version. |
+| `clean` | Clears local cache used by CodeFox |
 | `--help`  | Shows available flags and usage information.                                                         |
 
 ---

@@ -1,12 +1,12 @@
 [project]
 name = "codefox"
-version = "0.3.5"
+version = "0.4.0"
 description = "CodeFox CLI - code auditing and code review tool"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "bm25s==0.3.0",
-    "faiss-cpu>=1.7.4",
+    "qdrant-client>=1.7.0",
     "fastembed>=0.3.0",
     "gitpython==3.1.46",
     "google-genai==1.63.0",
@@ -20,6 +20,9 @@ dependencies = [
     "rich==14.3.2",
     "typer==0.23.1",
     "tree-sitter-language-pack==0.13.0",
+    "psutil==7.2.2",
+    "PyGithub==2.8.1",
+    "pygments==2.19.2",
 ]
 
 [project.optional-dependencies]
