@@ -43,3 +43,64 @@ def test_base_api_file_not_found_raises_runtime_error() -> None:
     ):
         with pytest.raises(RuntimeError, match="not found"):
             Gemini(config=None)
+
+
+def test_review_config_defaults() -> None:
+    with patch("codefox.api.gemini.genai.Client"):
+        g = Gemini(
+            config={
+                "model": {"name": "gemini-2.0-flash"},
+                "review": {},
+            }
+        )
+    assert g.review_config.get("max_issues") is None
+    assert g.review_config.get("suggest_fixes") is True
+    assert g.review_config.get("diff_only") is False
+    assert g.review_config.get("sourceBranch") is None
+    assert g.review_config.get("targetBranch") is None
+    assert g.review_config.get("tools") is False
+
+
+def test_temperature_out_of_range_raises() -> None:
+    with patch("codefox.api.gemini.genai.Client"):
+        with pytest.raises(ValueError, match="Temperature"):
+            Gemini(
+                config={
+                    "model": {"name": "x", "temperature": 1.5},
+                    "review": {},
+                }
+            )
+        with pytest.raises(ValueError, match="Temperature"):
+            Gemini(
+                config={
+                    "model": {"name": "x", "temperature": -0.1},
+                    "review": {},
+                }
+            )
+
+
+def test_timeout_default_and_validation() -> None:
+    with patch("codefox.api.gemini.genai.Client"):
+        g = Gemini(
+            config={
+                "model": {"name": "x"},
+                "review": {},
+            }
+        )
+    assert g.model_config.get("timeout") == 600
+
+    with patch("codefox.api.gemini.genai.Client"):
+        with pytest.raises(ValueError, match="Timeout"):
+            Gemini(
+                config={
+                    "model": {"name": "x", "timeout": -1},
+                    "review": {},
+                }
+            )
+        with pytest.raises(ValueError, match="Timeout"):
+            Gemini(
+                config={
+                    "model": {"name": "x", "timeout": 0},
+                    "review": {},
+                }
+            )

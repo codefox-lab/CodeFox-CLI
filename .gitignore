@@ -8,6 +8,8 @@
 .codefox.yml
 
 venv*/
+build/
 __pycache__/
 *.pyc
 .codefox/
+codefox.egg-info/

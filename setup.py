@@ -7,15 +7,15 @@ README = (HERE / "README.txt").read_text(encoding="utf-8") if (HERE / "README.tx
 
 setup(
 	name="codefox",
-	version="0.3.5",
+	version="0.4.0",
 	description="CodeFox CLI - code auditing and code review tool",
 	long_description=README,
 	long_description_content_type="text/plain",
-	author="",
+	author="CodeFox",
 	packages=find_packages(),
 	include_package_data=True,
 	install_requires=[
-		"faiss-cpu>=1.7.4",
+		"qdrant-client>=1.7.0",
 		"fastembed>=0.3.0",
 		"gitpython==3.1.46",
 		"google-genai==1.63.0",

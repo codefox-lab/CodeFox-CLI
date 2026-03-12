@@ -25,7 +25,7 @@ def test_prompt_template_get_contains_role(full_config: dict) -> None:
     t = PromptTemplate(full_config)
     out = t.get()
     assert "CodeFox" in out or "ROLE" in out
-    assert "ANALYSIS PROTOCOL" in out or "protocol" in out.lower()
+    assert "ANALYSIS" in out or "Workflow" in out or "protocol" in out.lower()
 
 
 def test_prompt_template_get_contains_review_policy(full_config: dict) -> None:

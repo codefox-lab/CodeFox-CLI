@@ -1,13 +1,25 @@
+from typing import Any
+
 from rich import print
 from rich.table import Table
 
 from codefox.api.base_api import BaseAPI
-from codefox.base_cli import BaseCLI
+from codefox.cli.base_cli import BaseCLI
+from codefox.utils.local_rag import LocalRAG
 
 
 class List(BaseCLI):
-    def __init__(self, model: type[BaseAPI]):
+    def __init__(
+        self, model: type[BaseAPI], args: dict[str, Any] | None = None
+    ):
         self.model = model()
+        self.args = args
+
+    def _get_tag_model(self) -> list[str]:
+        if self.args and self.args.get("typeModel") == "embeddings":
+            return LocalRAG.get_model_tag()
+
+        return self.model.get_tag_models()
 
     def execute(self) -> None:
         is_connect, error = self.model.check_connection()
@@ -16,7 +28,7 @@ class List(BaseCLI):
             return
 
         try:
-            models = self.model.get_tag_models()
+            models = self._get_tag_model()
 
             if not models:
                 print("[yellow]No models available[/yellow]")

@@ -1,4 +1,5 @@
 import os
+import time
 from typing import Any
 
 import requests
@@ -17,13 +18,11 @@ from rich.prompt import Confirm
 
 from codefox.api.base_api import BaseAPI, ExecuteResponse, Response
 from codefox.prompts.prompt_template import PromptTemplate
-from codefox.utils.helper import Helper
-from codefox.utils.local_rag import LocalRAG
+from codefox.tools.rag_tool import RagTool
 
 
 class Ollama(BaseAPI):
     default_model_name = "gemma3:12b"
-    default_embedding = "BAAI/bge-small-en-v1.5"
     base_url = "http://localhost:11434"
     default_max_rag_chars = 4096
     default_max_diff_chars = 16_000
@@ -34,11 +33,6 @@ class Ollama(BaseAPI):
         if self.model_config.get("base_url"):
             self.base_url = self.model_config.get("base_url")
 
-        if "embedding" not in self.model_config or not self.model_config.get(
-            "embedding"
-        ):
-            self.model_config["embedding"] = self.default_embedding
-
         api_key = os.getenv("CODEFOX_API_KEY")
 
         headers = None
@@ -46,8 +40,6 @@ class Ollama(BaseAPI):
             headers = {
                 "Authorization": f"Bearer {api_key}",
             }
-
-        self.rag = None
 
         self.client = Client(
             host=self.base_url,
@@ -69,62 +61,13 @@ class Ollama(BaseAPI):
             return False, e
 
     def upload_files(self, path_files: str) -> tuple[bool, Any]:
-        if self.review_config["diff_only"]:
-            return True, None
-
-        rag_kw = {
-            "max_query_chars": self.model_config.get(
-                "rag_max_query_chars", 2000
-            ),
-        }
-        key_map = {
-            "rag_min_score": "min_score",
-            "rag_chunk_size": "chunk_size",
-            "rag_chunk_overlap": "chunk_overlap",
-            "rag_embed_batch_size": "embed_batch_size",
-            "rag_max_chunks": "max_chunks",
-            "rag_max_files": "max_files",
-            "rag_threads_embedding": "threads_embedding",
-            "rag_lazy_load": "lazy_load",
-            "rag_index_dir": "index_dir",
-        }
-        for config_key, kw_key in key_map.items():
-            if config_key in self.model_config:
-                rag_kw[kw_key] = self.model_config[config_key]
-
-        self.rag = LocalRAG(
-            self.model_config["embedding"], files_path=path_files, **rag_kw
-        )
-        if not self.rag.load_index():
-            self.rag.build()
-            self.rag.save_index()
-
-        return True, None
+        return super().upload_files(path_files)
 
     def remove_files(self):
         pass
 
     def execute(self, diff_text: str) -> ExecuteResponse:
-        max_rag_chars = (
-            self.model_config.get("max_rag_chars")
-            or self.default_max_rag_chars
-        )
-        max_diff_chars = (
-            self.model_config.get("max_diff_chars")
-            or self.default_max_diff_chars
-        )
-
-        if len(diff_text) > max_diff_chars:
-            diff_text = (
-                diff_text[:max_diff_chars]
-                + "\n\n... [diff truncated for context length]"
-            )
-
-        rag_context = ""
-        if self.rag:
-            rag_context = Helper.get_files_context(
-                self.rag, diff_text, k=12, max_rag_chars=max_rag_chars
-            )
+        rag_context = self.get_context(diff_text)
 
         system_prompt = PromptTemplate(self.config)
         context_prompt = PromptTemplate(
@@ -135,20 +78,77 @@ class Ollama(BaseAPI):
             "content",
         )
 
+        rag_tool = RagTool(self.rag, self.max_rag_chars)
+        search_knowledge_base = rag_tool.get_tool()
+
         options = {}
         if self.model_config.get("temperature") is not None:
             options["temperature"] = self.model_config["temperature"]
         if self.model_config.get("max_tokens") is not None:
             options["num_predict"] = self.model_config["max_tokens"]
 
+        tools = None
+        if self.review_config.get("tools") and self.rag:
+            tools = [
+                search_knowledge_base,
+            ]
+
+        messages: list[Any] = [
+            {"role": "system", "content": system_prompt.get()},
+            {"role": "user", "content": context_prompt.get()},
+        ]
+
         chat_response: ChatResponse = self.client.chat(
             model=self.model_config["name"],
-            messages=[
-                {"role": "system", "content": system_prompt.get()},
-                {"role": "user", "content": context_prompt.get()},
-            ],
+            messages=messages,
             options=options if options else None,
+            tools=tools if tools else None,
+            think=self.model_config["think_mode"],
         )
+
+        messages.append(chat_response.message)
+        max_tool_iterations = self.review_config["max_tool_iterations"]
+        tool_iteration = 0
+
+        while (
+            chat_response.message.tool_calls
+            and tool_iteration < max_tool_iterations
+        ):
+            tool_iteration += 1
+
+            for call in chat_response.message.tool_calls:
+                if call.function.name == "search_knowledge_base":
+                    args = call.function.arguments
+                    if "query" not in args:
+                        result = (
+                            "Error: Invalid arguments for "
+                            "search_knowledge_base"
+                        )
+                    else:
+                        result = search_knowledge_base(args["query"])
+                else:
+                    result = "Unknown tool"
+
+                messages.append(
+                    {
+                        "role": "tool",
+                        "name": call.function.name,
+                        "content": str(result),
+                    }
+                )
+
+            chat_response = self.client.chat(
+                model=self.model_config["name"],
+                messages=messages,
+                options=options if options else None,
+                tools=tools if tools else None,
+                think=self.model_config["think_mode"],
+            )
+
+            time.sleep(0.5)
+
+        if tool_iteration >= max_tool_iterations:
+            print("[yellow]Warning: Max tool iterations reached[/yellow]")
 
         response = Response(chat_response.message.content or "")
         return response
