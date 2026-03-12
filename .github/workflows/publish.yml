@@ -24,4 +24,4 @@ jobs:
 
       - name: Publish package
         run: |
-          twine upload dist/* -u __token__ -p ${{ secrets.PYPI_API_TOKEN }}
+          twine upload dist/* -u __token__ -p ${{ secrets.PYPI_API_TOKEN }} --verbose
