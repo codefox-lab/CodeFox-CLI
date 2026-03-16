@@ -11,12 +11,12 @@ inputs:
     required: true
 
   codefox-branch:
-    description: 'Git branch of the CodeFox repository to install and run (e.g., main, dev, or a specific release branch).'
+    description: 'Git branch of the CodeFox repository to install and run.'
     default: 'main'
     required: false
 
   github-token:
-    description: 'GitHub token used to authenticate with the GitHub API for posting review comments and interacting with pull requests.'
+    description: 'GitHub token used to authenticate with the GitHub API.'
     default: ${{ github.token }}
     required: false
 
@@ -27,6 +27,16 @@ runs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.12'
+
+    - name: Restore CodeFox cache
+      uses: actions/cache@v4
+      with:
+        path: .codefox
+        key: ${{ runner.os }}-codefox-${{ github.repository }}-${{ github.base_ref }}-${{ inputs.codefox-branch }}
+        restore-keys: |
+          ${{ runner.os }}-codefox-${{ github.repository }}-${{ github.base_ref }}-
+          ${{ runner.os }}-codefox-${{ github.repository }}-
+          ${{ runner.os }}-codefox-
 
     - name: Install CodeFox
       shell: bash
