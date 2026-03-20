@@ -17,7 +17,7 @@ codefox_review:
   before_script:
     - apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates && rm -rf /var/lib/apt/lists/*
     - python -m pip install --upgrade pip
-    - pip install "git+https://github.com/URLbug/CodeFox-CLI.git@${$CODEFOX_BRANCH}"
+    - pip install "git+https://github.com/URLbug/CodeFox-CLI.git@${CODEFOX_BRANCH:-main}"
     - |
       umask 077
       {
