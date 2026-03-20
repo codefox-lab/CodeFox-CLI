@@ -29,7 +29,7 @@ class GitLabBot:
 
         self.gitlab = Gitlab(
             url=self.gitlab_url,
-            job_token=self.gitlab_token,
+            private_token=self.gitlab_token,
         )
 
     def send(self, message: str) -> None:
