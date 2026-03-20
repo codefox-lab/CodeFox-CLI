@@ -1,16 +1,19 @@
-stage:
+stages:
   - review
 
 codefox_review:
   stage: review
   image: python:3.12-slim
+
   variables:
     PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
   cache:
     key: "codefox-$CI_PROJECT_ID"
     paths:
       - .codefox/
       - .cache/pip/
+
   before_script:
     - apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates && rm -rf /var/lib/apt/lists/*
     - python -m pip install --upgrade pip
@@ -21,7 +24,11 @@ codefox_review:
         echo "CODEFOX_API_KEY=$CODEFOX_API_KEY"
         echo "GITLAB_TOKEN=$GITLAB_TOKEN"
       } > .codefoxenv
+
   script:
     - git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME":"$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" || true
     - git fetch origin "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME":"$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" || true
     - codefox scan --target-branch "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" --source-branch "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" --ci
+
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
