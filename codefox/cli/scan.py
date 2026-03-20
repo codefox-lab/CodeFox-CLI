@@ -9,6 +9,7 @@ from rich.markup import escape
 
 from codefox.api.base_api import BaseAPI
 from codefox.bots.github_bot import GitHubBot
+from codefox.bots.gitlab_bot import GitLabBot
 from codefox.cli.base_cli import BaseCLI
 from codefox.cli.list import List
 from codefox.utils.helper import Helper
@@ -20,8 +21,11 @@ class Scan(BaseCLI):
         self.args = args
 
         self.github_bot = None
-        if self.args.get("ci", False):
+        self.gitlab_bot = None
+        if self.args.get("ci", False) and os.getenv("GITHUB_BOT"):
             self.github_bot = GitHubBot()
+        elif self.args("ci", False) and os.getenv("GITLAB_BOT"):
+            self.gitlab_bot = GitLabBot()
 
     def execute(self) -> None:
         source_branch, target_branch = self._get_branchs()
@@ -79,6 +83,10 @@ class Scan(BaseCLI):
         response = self.model.execute(diff_text)
         if self.github_bot is not None:
             self.github_bot.send(response.text)
+        
+        if self.gitlab_bot is not None:
+            self.gitlab_bot.send(response.text)
+
         self.model.remove_files()
 
     def _classic_response_answer(self, diff_text: str) -> None:
