@@ -20,8 +20,7 @@ codefox_review:
       umask 077
       {
         echo "CODEFOX_API_KEY=$CODEFOX_API_KEY"
-        echo "GITLAB_TOKEN=${GITLAB_TOKEN:-$CI_JOB_TOKEN}"
-        echo "GITLAB_BOT=${GITLAB_TOKEN:-$CI_JOB_TOKEN}"
+        echo "GITLAB_TOKEN=${GITLAB_TOKEN}"
         echo "GITLAB_URL=${CI_SERVER_URL}"
         echo "GITLAB_REPOSITORY=${CI_PROJECT_ID}"
         echo "PR_NUMBER=${CI_MERGE_REQUEST_IID}"

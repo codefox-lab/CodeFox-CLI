@@ -7,14 +7,14 @@ from gitlab.exceptions import GitlabGetError, GitlabCreateError
 
 class GitLabBot:
     def __init__(self) -> None:
-        self.gitlab_token = os.getenv("GITLAB_BOT")
+        self.gitlab_token = os.getenv("GITLAB_TOKEN")
         self.gitlab_url = os.getenv("GITLAB_URL", "https://gitlab.com")
         self.repository = os.getenv("GITLAB_REPOSITORY")
         self.mr_iid = os.getenv("PR_NUMBER")
 
         if not self.gitlab_token:
             raise ValueError(
-                "GITLAB_BOT environment variable is not set. "
+                "GITLAB_TOKEN environment variable is not set. "
                 "This token is required to authenticate with the GitLab API."
             )
 
