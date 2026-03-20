@@ -31,8 +31,6 @@ class GitLabBot:
         if not self.pr_number or not self.pr_number.isdigit():
             raise RuntimeError(f"Invalid PR_NUMBER: {self.pr_number}")
 
-        self.gitlab.auth()
-
         repo = self.gitlab.projects.get(self.repository)
         mr = repo.mergerequests.get(int(self.pr_number))
 

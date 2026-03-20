@@ -13,7 +13,6 @@ codefox_review:
       - ".cache/pip/"
 
   before_script:
-    - echo "CODEFOX_BRANCH=[$CODEFOX_BRANCH]"
     - apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates && rm -rf /var/lib/apt/lists/*
     - python -m pip install --upgrade pip
     - pip install "git+https://github.com/URLbug/CodeFox-CLI.git@${CODEFOX_BRANCH}"
@@ -27,7 +26,6 @@ codefox_review:
         echo "GITLAB_REPOSITORY=${CI_PROJECT_PATH}"
         echo "PR_NUMBER=${CI_MERGE_REQUEST_IID}"
       } > "$CI_PROJECT_DIR/.codefoxenv"
-    - test -f .codefoxenv && echo ".codefoxenv exists"
 
   script:
     - git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME":"$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" || true
