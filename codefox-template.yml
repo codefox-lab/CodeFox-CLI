@@ -1,4 +1,8 @@
-.codefox_scan:
+stage:
+  - review
+
+codefox_review:
+  stage: review
   image: python:3.12-slim
   variables:
     PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
