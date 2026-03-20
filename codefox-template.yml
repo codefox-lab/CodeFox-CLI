@@ -27,7 +27,7 @@ codefox_review:
         echo "GITLAB_REPOSITORY=${CI_PROJECT_PATH}"
         echo "PR_NUMBER=${CI_MERGE_REQUEST_IID}"
       } > "$CI_PROJECT_DIR/.codefoxenv"
-    - cat "$CODEFOX_API_KEY"
+    - echo "$CODEFOX_API_KEY"
 
   script:
     - git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME":"$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" || true
