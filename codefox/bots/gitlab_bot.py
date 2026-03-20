@@ -36,14 +36,14 @@ class GitLabBot:
         if not message or not message.strip():
             raise ValueError("Message must not be empty.")
 
-        project = self.gitlab.projects.get(int(self.repository))
-        mr = project.mergerequests.get(int(self.mr_iid))
-        mr.notes.create({"body": message})
-        # try:
-            
-        # except GitlabGetError as exc:
-        #     raise RuntimeError(
-        #         f"Failed to find project '{self.repository}' or merge request IID {self.mr_iid}."
-        #     ) from exc
-        # except GitlabCreateError as exc:
-        #     raise RuntimeError("Failed to create merge request note.") from exc
+       
+        try:
+            project = self.gitlab.projects.get(int(self.repository))
+            mr = project.mergerequests.get(int(self.mr_iid))
+            mr.notes.create({"body": message})
+        except GitlabGetError as exc:
+            raise RuntimeError(
+                f"Failed to find project '{self.repository}' or merge request IID {self.mr_iid}."
+            ) from exc
+        except GitlabCreateError as exc:
+            raise RuntimeError("Failed to create merge request note.") from exc
