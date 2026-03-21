@@ -22,7 +22,7 @@ class Scan(BaseCLI):
 
         self.github_bot = None
         self.gitlab_bot = None
-        if self.args.get("ci", False) and os.getenv("GITHUB_BOT"):
+        if self.args.get("ci", False) and os.getenv("GITHUB_TOKEN"):
             self.github_bot = GitHubBot()
         elif self.args.get("ci", False) and os.getenv("GITLAB_TOKEN"):
             self.gitlab_bot = GitLabBot()
