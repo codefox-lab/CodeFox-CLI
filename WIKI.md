@@ -195,6 +195,7 @@ The parameters in the `model` section control the loading of the embedding model
 | --- | --- | --- | --- |
 | `model.embedding` | `string` | `null` | see above | Identifier for the embedding model (fastembed). |
 | `model.max_rag_chars` | `number` | `4096` | Maximum number of RAG context characters injected into the prompt. Increasing this provides more code in the context, but increases token consumption. |
+| `model.max_rag_matching_chunks` | `number` | `12` | Maximum number of RAG context chunks to search in database.
 | `model.max_diff_chars` | `number` | `500000` | Diff size truncation: if the diff is larger than this value, it is truncated and a truncation notice is appended at the end. |
 | `model.rag_max_query_chars` | `number` | `2000` | Maximum length of the query to RAG (when searching for relevant chunks). An overly long query is truncated. |
 | `model.rag_chunk_size` | `number` | `1000` | Chunk size in characters when splitting files. Code is split by function/class boundaries (tree-sitter) or by sentences. |

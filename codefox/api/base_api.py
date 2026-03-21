@@ -20,6 +20,7 @@ class Response:
 class BaseAPI(abc.ABC):
     default_embedding = "BAAI/bge-small-en-v1.5"
     default_max_rag_chars = 4096
+    default_max_rag_matching_chunks = 12
     default_max_diff_chars = 16_000
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
@@ -52,6 +53,10 @@ class BaseAPI(abc.ABC):
         self.max_rag_chars = (
             self.model_config.get("max_rag_chars")
             or self.default_max_rag_chars
+        )
+        self.max_rag_matching_chunks = (
+            self.model_config.get("max_rag_matching_chunks")
+            or self.default_max_rag_matching_chunks
         )
         self.max_diff_chars = (
             self.model_config.get("max_diff_chars")
@@ -142,7 +147,7 @@ class BaseAPI(abc.ABC):
             rag_context = Parser.get_files_context(
                 self.rag,
                 diff_text,
-                k=12,
+                k=self.max_rag_matching_chunks,
                 max_rag_chars=self.max_rag_chars,
             )
 
