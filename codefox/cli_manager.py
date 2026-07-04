@@ -1,4 +1,5 @@
 import importlib.metadata
+import os
 from pathlib import Path
 from typing import Any
 
@@ -21,14 +22,25 @@ class CLIManager:
         self.args = args
 
         path_env = Path(".codefoxenv")
-        if not load_dotenv(path_env) and command not in [
+        env_loaded = load_dotenv(path_env)
+
+        if not env_loaded and command not in [
             "init",
             "version",
         ]:
-            raise FileNotFoundError(
-                "Failed to load .codefoxenv file."
-                "Please ensure it exists and is properly formatted."
-            )
+            if not os.getenv("CODEFOX_API_KEY"):
+                provider = "gemini"
+                try:
+                    config = Helper.read_yml(".codefox.yml")
+                    provider = config.get("provider", "gemini")
+                except Exception:
+                    pass
+
+                if provider in ["gemini", "openrouter"]:
+                    raise FileNotFoundError(
+                        "Failed to load .codefoxenv file and CODEFOX_API_KEY is not set in the environment. "
+                        "Please ensure either .codefoxenv exists or CODEFOX_API_KEY is exported."
+                    )
 
     def run(self) -> None:
         if self.command == "version":
