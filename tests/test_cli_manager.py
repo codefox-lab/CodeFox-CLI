@@ -63,7 +63,28 @@ def test_init_does_not_require_codefoxenv() -> None:
         mock_init.return_value.execute.assert_called_once()
 
 
-def test_scan_requires_codefoxenv() -> None:
+def test_scan_requires_codefoxenv_when_key_missing() -> None:
     with patch("codefox.cli_manager.load_dotenv", return_value=False):
-        with pytest.raises(FileNotFoundError, match=".codefoxenv"):
-            CLIManager(command="scan", args={})
+        with patch("os.getenv", return_value=None):
+            with patch("codefox.cli_manager.Helper") as mock_helper:
+                mock_helper.read_yml.return_value = {"provider": "gemini"}
+                with pytest.raises(FileNotFoundError, match="CODEFOX_API_KEY"):
+                    CLIManager(command="scan", args={})
+
+
+def test_scan_does_not_require_codefoxenv_when_key_present() -> None:
+    with patch("codefox.cli_manager.load_dotenv", return_value=False):
+        with patch("os.getenv", return_value="some-key"):
+            # Should not raise any error during initialization
+            manager = CLIManager(command="scan", args={})
+            assert manager.command == "scan"
+
+
+def test_scan_does_not_require_key_for_ollama() -> None:
+    with patch("codefox.cli_manager.load_dotenv", return_value=False):
+        with patch("os.getenv", return_value=None):
+            with patch("codefox.cli_manager.Helper") as mock_helper:
+                mock_helper.read_yml.return_value = {"provider": "ollama"}
+                # Should not raise any error during initialization
+                manager = CLIManager(command="scan", args={})
+                assert manager.command == "scan"
