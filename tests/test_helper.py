@@ -5,7 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from codefox.utils.helper import Helper
+from codefox.utils.helper import (
+    GitBranchNotFoundError,
+    GitRepositoryError,
+    Helper,
+)
 
 
 def test_read_yml_missing_file_raises() -> None:
@@ -24,6 +28,32 @@ def test_read_yml_valid(tmp_path: Path, sample_config: dict) -> None:
     result = Helper.read_yml(str(path))
     assert result["model"]["name"] == "gemini-2.0-flash"
     assert result["model"]["temperature"] == 0.2
+
+
+def test_get_diff_outside_git_repository_is_explicit(tmp_path: Path) -> None:
+    previous = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with pytest.raises(GitRepositoryError, match="not a Git repository"):
+            Helper.get_diff()
+    finally:
+        os.chdir(previous)
+
+
+def test_get_diff_missing_branch_is_explicit(tmp_path: Path) -> None:
+    import git
+
+    repo = git.Repo.init(tmp_path)
+    (tmp_path / "file.py").write_text("print('ok')\n", encoding="utf-8")
+    repo.index.add(["file.py"])
+    repo.index.commit("initial")
+    previous = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with pytest.raises(GitBranchNotFoundError, match="missing"):
+            Helper.get_diff("missing", "main")
+    finally:
+        os.chdir(previous)
 
 
 def test_read_codefoxignore_missing_returns_empty(tmp_path: Path) -> None:
