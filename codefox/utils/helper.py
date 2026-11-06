@@ -7,6 +7,14 @@ import yaml
 
 from codefox.utils.parser import Parser, TreeSitterParser
 
+
+class GitRepositoryError(RuntimeError):
+    """Raised when the current directory is not inside a Git repository."""
+
+
+class GitBranchNotFoundError(RuntimeError):
+    """Raised when a requested source or target branch cannot be resolved."""
+
 if TYPE_CHECKING:
     import codefox.utils.local_rag as local_rag
 
@@ -66,21 +74,44 @@ class Helper:
     ) -> str | None:
         try:
             repo = git.Repo(".", search_parent_directories=True)
-
-            if source_branch and target_branch:
-                diff_text = repo.git.diff(
-                    f"origin/{target_branch}...origin/{source_branch}"
-                )
-            else:
-                diff_text = repo.git.diff()
-
-            return cast(str | None, diff_text)
         except (
             git.exc.InvalidGitRepositoryError,
             git.exc.NoSuchPathError,
-            git.exc.GitCommandError,
-        ):
-            return None
+        ) as e:
+            raise GitRepositoryError(
+                "The current directory is not a Git repository. "
+                "Run this command inside a checkout containing .git."
+            ) from e
+
+        if source_branch and target_branch:
+            refs: dict[str, str] = {}
+            for branch in (source_branch, target_branch):
+                for ref in (f"origin/{branch}", branch):
+                    try:
+                        refs[branch] = str(repo.commit(ref))
+                        break
+                    except (git.exc.BadName, ValueError):
+                        continue
+                if branch not in refs:
+                    raise GitBranchNotFoundError(
+                        f"Branch '{branch}' does not exist locally or on "
+                        "the configured origin remote."
+                    )
+
+            try:
+                return cast(
+                    str | None,
+                    repo.git.diff(
+                        f"{refs[target_branch]}...{refs[source_branch]}"
+                    ),
+                )
+            except git.exc.GitCommandError as e:
+                raise RuntimeError(f"Unable to compare branches: {e}") from e
+
+        try:
+            return cast(str | None, repo.git.diff())
+        except git.exc.GitCommandError as e:
+            raise RuntimeError(f"Unable to read the Git diff: {e}") from e
 
     # ------------------------------------------------------------------
     # Backward‑compatible wrappers - delegate to Parser
