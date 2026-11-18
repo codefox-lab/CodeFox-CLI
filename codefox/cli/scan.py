@@ -19,7 +19,16 @@ from codefox.utils.helper import (
 )
 
 
+class EmptyReviewError(RuntimeError):
+    """Raised when the model returns nothing that can be posted as a review."""
+
+
 class Scan(BaseCLI):
+    # Fail loudly instead of posting a blank (or "TypeError"/"None") comment.
+    placeholder_texts = frozenset(
+        {"", "none", "null", "n/a", "undefined", "no response", "empty"}
+    )
+
     def __init__(self, model: type[BaseAPI], args: dict[str, Any]):
         self.model = model()
         self.args = args
@@ -90,13 +99,35 @@ class Scan(BaseCLI):
 
     def _ci_response_answer(self, diff_text: str) -> None:
         response = self.model.execute(diff_text)
+        message = self._clean_review_text(getattr(response, "text", None))
+        if not message:
+            self.model.remove_files()
+            raise EmptyReviewError(
+                "The model returned an empty review, so nothing was posted "
+                "to the pull request. Reported raw output: "
+                f"{str(getattr(response, 'text', None))[:200]!r}. "
+                "Check the model name, API key and token limits in "
+                ".codefox.yml / .codefoxenv."
+            )
+
         if self.github_bot is not None:
-            self.github_bot.send(response.text)
+            self.github_bot.send(message)
 
         if self.gitlab_bot is not None:
-            self.gitlab_bot.send(response.text)
+            self.gitlab_bot.send(message)
 
         self.model.remove_files()
+
+    def _clean_review_text(self, text: Any) -> str:
+        """Normalize model output into either a real comment or ''."""
+        if not isinstance(text, str):
+            return ""
+
+        message = text.strip()
+        if message.lower() in self.placeholder_texts:
+            return ""
+
+        return message
 
     def _classic_response_answer(self, diff_text: str) -> None:
         try:

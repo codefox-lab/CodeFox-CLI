@@ -15,4 +15,6 @@ codefox.egg-info/
 
 venv*/
 
+.dsh/
+
 *.pyc
