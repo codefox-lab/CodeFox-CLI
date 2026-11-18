@@ -15,6 +15,7 @@ class GitRepositoryError(RuntimeError):
 class GitBranchNotFoundError(RuntimeError):
     """Raised when a requested source or target branch cannot be resolved."""
 
+
 if TYPE_CHECKING:
     import codefox.utils.local_rag as local_rag
 

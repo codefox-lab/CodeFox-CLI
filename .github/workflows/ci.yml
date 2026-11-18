@@ -33,7 +33,7 @@ jobs:
         run: ruff format --check codefox tests
 
       - name: Mypy
-        run: mypy codefox --no-error-summary || true
+        run: mypy codefox
 
       - name: Pytest
         run: pytest tests -v --tb=short

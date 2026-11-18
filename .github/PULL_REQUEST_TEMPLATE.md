@@ -17,6 +17,7 @@ _or_ Relates to #(issue number)
 
 ## Checklist
 
+- [ ] The CI workflow passes for this PR
 - [ ] Tests added or updated for the changed behavior
 - [ ] `ruff check codefox tests` and `ruff format codefox tests` pass
 - [ ] `mypy codefox` passes
