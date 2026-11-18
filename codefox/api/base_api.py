@@ -120,7 +120,10 @@ class BaseAPI(abc.ABC):
                 self.rag.save_index()
             return True, None
         except Exception as e:
-            return False, f"LocalRAG error: {str(e)}"
+            # RAG only enriches the review with project context. Losing it
+            # must not abort the scan and leave the PR without a comment.
+            self.rag = None
+            return True, f"LocalRAG unavailable, reviewing diff only: {e}"
 
     @abc.abstractmethod
     def remove_files(self) -> None:

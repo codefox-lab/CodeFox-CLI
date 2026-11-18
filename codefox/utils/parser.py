@@ -131,10 +131,25 @@ class Parser:
         return chunks
 
     @classmethod
+    def _split_sentences(cls, text: str) -> list[str]:
+        """Split text into sentences without depending on NLTK data files.
+
+        NLTK 3.9 `sent_tokenize` needs the `punkt_tab` package; on a fresh
+        CI runner it raises `LookupError`. Chunking must never fail because
+        of that, so a regex split is the fallback.
+        """
+        try:
+            sentences = sent_tokenize(text)
+        except Exception:
+            sentences = re.split(r"(?<=[.!?])\s+", text)
+
+        return [s for s in sentences if s.strip()]
+
+    @classmethod
     def chunk_text_sentences(
         cls, text: str, chunk_size: int, overlap: int
     ) -> list[str]:
-        sentences = sent_tokenize(text)
+        sentences = cls._split_sentences(text)
         chunks = []
         current = []
 
@@ -154,6 +169,14 @@ class Parser:
         if current:
             chunks.append(" ".join(current))
 
+        if not chunks and text.strip():
+            # No sentence boundaries (e.g. dense code): fall back to
+            # fixed-size slices so a file is never dropped silently.
+            step = max(chunk_size - overlap, 1)
+            chunks = [
+                text[i : i + chunk_size] for i in range(0, len(text), step)
+            ]
+
         return chunks
 
     @classmethod
@@ -162,10 +185,16 @@ class Parser:
     ) -> list:
         ext = path.suffix.lower()
 
-        parser = cls.get_ts_parser_by_extension(ext)
+        try:
+            parser = cls.get_ts_parser_by_extension(ext)
+        except Exception:
+            parser = None
 
         if parser:
-            chunks = cls.chunk_code_with_ts(parser, content)
+            try:
+                chunks = cls.chunk_code_with_ts(parser, content)
+            except Exception:
+                chunks = []
             if chunks:
                 return chunks
 

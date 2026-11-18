@@ -104,3 +104,21 @@ def test_timeout_default_and_validation() -> None:
                     "review": {},
                 }
             )
+
+
+def test_upload_files_falls_back_to_diff_only_when_rag_fails(
+    sample_config: dict,
+) -> None:
+    with patch("codefox.api.gemini.genai.Client"):
+        api = Gemini(sample_config)
+
+    with patch(
+        "codefox.api.base_api.LocalRAG",
+        side_effect=ValueError("No chunks could be built"),
+    ):
+        ok, message = api.upload_files(".")
+
+    assert ok is True
+    assert api.rag is None
+    assert "reviewing diff only" in message
+    assert "No chunks could be built" in message
