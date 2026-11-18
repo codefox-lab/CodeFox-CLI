@@ -24,6 +24,9 @@ class GitHubBot:
         self.github = Github(self.github_token)
 
     def send(self, message: str) -> None:
+        if not message or not message.strip():
+            raise ValueError("Message must not be empty.")
+
         if not self.pr_number or not self.pr_number.isdigit():
             raise RuntimeError(f"Invalid PR_NUMBER: {self.pr_number}")
 

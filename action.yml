@@ -62,6 +62,18 @@ runs:
     - name: Run CodeFox Scan
       shell: bash
       run: |
+        # Without .codefox.yml the scan aborts before anything is posted,
+        # which leaves the PR with no review comment at all.
+        if [ ! -f .codefox.yml ]; then
+          codefox init --provider "${CODEFOX_PROVIDER:-gemini}" \
+            --token "codefox-action-placeholder-token" </dev/null >/dev/null 2>&1 || true
+        fi
+
+        if [ ! -f .codefox.yml ]; then
+          echo "::error::CodeFox could not create .codefox.yml in the repository root."
+          exit 1
+        fi
+
         codefox scan \
           --target-branch ${{ github.base_ref }} \
           --source-branch ${{ github.head_ref }} \

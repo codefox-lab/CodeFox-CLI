@@ -2,8 +2,10 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from codefox.api.gemini import Gemini
-from codefox.cli.scan import Scan
+from codefox.cli.scan import EmptyReviewError, Scan
 from codefox.utils.helper import GitBranchNotFoundError, GitRepositoryError
 
 
@@ -101,3 +103,33 @@ def test_get_branchs_prefers_args_over_config() -> None:
     src, tgt = scan._get_branchs()
     assert src == "feat"
     assert tgt == "master"
+
+
+def _ci_scan(response_text: object) -> Scan:
+    scan = Scan.__new__(Scan)
+    scan.args = {"ci": True}
+    scan.model = MagicMock()
+    scan.model.execute.return_value = MagicMock(text=response_text)
+    scan.github_bot = MagicMock()
+    scan.gitlab_bot = None
+    return scan
+
+
+def test_ci_response_posts_model_text() -> None:
+    scan = _ci_scan("  ### CodeFox Audit Report\nfine  ")
+    scan._ci_response_answer("diff")
+    scan.github_bot.send.assert_called_once_with(
+        "### CodeFox Audit Report\nfine"
+    )
+    scan.model.remove_files.assert_called_once()
+
+
+@pytest.mark.parametrize("text", ["", "   \n\t", None, "None", "null"])
+def test_ci_response_raises_instead_of_posting_empty_comment(
+    text: object,
+) -> None:
+    scan = _ci_scan(text)
+    with pytest.raises(EmptyReviewError, match="empty review"):
+        scan._ci_response_answer("diff")
+    scan.github_bot.send.assert_not_called()
+    scan.model.remove_files.assert_called_once()
