@@ -12,7 +12,11 @@ from codefox.bots.github_bot import GitHubBot
 from codefox.bots.gitlab_bot import GitLabBot
 from codefox.cli.base_cli import BaseCLI
 from codefox.cli.list import List
-from codefox.utils.helper import Helper
+from codefox.utils.helper import (
+    GitBranchNotFoundError,
+    GitRepositoryError,
+    Helper,
+)
 
 
 class Scan(BaseCLI):
@@ -30,10 +34,15 @@ class Scan(BaseCLI):
     def execute(self) -> None:
         source_branch, target_branch = self._get_branchs()
 
-        diff_text = Helper.get_diff(source_branch, target_branch)
+        try:
+            diff_text = Helper.get_diff(source_branch, target_branch)
+        except (GitRepositoryError, GitBranchNotFoundError) as e:
+            print(f"[red]{escape(str(e))}[/red]")
+            return
         if not diff_text:
             print(
-                "[yellow]Repository is not found or not have change[/yellow]"
+                "[yellow]No changes found between the selected "
+                "branches.[/yellow]"
             )
             return
 

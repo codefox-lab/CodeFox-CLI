@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 from codefox.api.gemini import Gemini
 from codefox.cli.scan import Scan
+from codefox.utils.helper import GitBranchNotFoundError, GitRepositoryError
 
 
 def test_get_branchs_from_args() -> None:
@@ -28,6 +29,33 @@ def test_get_branchs_from_args() -> None:
     src, tgt = scan._get_branchs()
     assert src == "feature"
     assert tgt == "main"
+
+
+def test_execute_reports_missing_git_repository() -> None:
+    scan = Scan.__new__(Scan)
+    scan.args = {}
+    scan.model = MagicMock()
+    scan.model.review_config = {"sourceBranch": None, "targetBranch": None}
+    with patch("codefox.cli.scan.Helper.get_diff") as get_diff:
+        get_diff.side_effect = GitRepositoryError("not a Git repository")
+        with patch("codefox.cli.scan.print") as output:
+            Scan.execute(scan)
+    output.assert_called_once()
+    assert "not a Git repository" in output.call_args.args[0]
+
+
+def test_execute_reports_missing_branch() -> None:
+    scan = Scan.__new__(Scan)
+    scan.args = {}
+    scan.model = MagicMock()
+    scan.model.review_config = {"sourceBranch": None, "targetBranch": None}
+    with patch("codefox.cli.scan.Helper.get_diff") as get_diff:
+        get_diff.side_effect = GitBranchNotFoundError(
+            "Branch 'missing' does not exist"
+        )
+        with patch("codefox.cli.scan.print") as output:
+            Scan.execute(scan)
+    assert "missing" in output.call_args.args[0]
 
 
 def test_get_branchs_from_config_when_args_empty() -> None:

@@ -55,7 +55,11 @@ class Ollama(BaseAPI):
 
     def check_connection(self) -> tuple[bool, Any]:
         try:
-            self.client.show(self.default_model_name)
+            response = requests.get(
+                f"{self.base_url}/api/tags",
+                timeout=self.model_config.get("timeout", 600),
+            )
+            response.raise_for_status()
             return True, None
         except Exception as e:
             return False, e
@@ -154,7 +158,10 @@ class Ollama(BaseAPI):
         return response
 
     def get_tag_models(self) -> list[str]:
-        response = requests.get(f"{self.base_url}/api/tags")
+        response = requests.get(
+            f"{self.base_url}/api/tags",
+            timeout=self.model_config.get("timeout", 600),
+        )
 
         if response.status_code == 200:
             data = response.json()
