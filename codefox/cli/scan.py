@@ -89,6 +89,9 @@ class Scan(BaseCLI):
             )
             return
 
+        if error:
+            print("[yellow]Warning: " + escape(str(error)) + "[/yellow]")
+
         print("[yellow]Waiting for model response...[/yellow]")
 
         if not self.args.get("ci", False):

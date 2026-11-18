@@ -30,7 +30,15 @@ class LocalRAG:
         self.console = Console()
         self.console.print("[bold cyan]Initializing LocalRAG...[/bold cyan]")
 
-        nltk.download("punkt")
+        # NLTK 3.9 sentence tokenization needs punkt_tab, not just punkt.
+        for package in ("punkt", "punkt_tab"):
+            try:
+                nltk.download(package, quiet=True)
+            except Exception as e:
+                self.console.print(
+                    f"[yellow]Warning: could not download NLTK data "
+                    f"'{package}': {e}[/yellow]"
+                )
 
         ram_gb = psutil.virtual_memory().total / math.pow(1024, 3)
         if ram_gb < 8:
@@ -135,6 +143,7 @@ class LocalRAG:
             step = chunk_size
 
         files_read = 0
+        failed_files: list[tuple[str, str]] = []
         for file in track(
             self.all_files,
             description="[cyan]Reading & chunking files...[/cyan]",
@@ -154,19 +163,49 @@ class LocalRAG:
                     path, content, chunk_size, chunk_overlap
                 )
 
+                if not chunks:
+                    failed_files.append((file, "no chunks produced"))
+
                 for chunk_text in chunks:
                     texts.append(chunk_text)
                     self.files.append({"path": file, "text": chunk_text})
 
                 if max_chunks is not None and len(texts) >= max_chunks:
                     break
-            except Exception:
+            except Exception as e:
+                # Keep going, but never lose the reason silently: an empty
+                # message here used to surface as a bare bm25s crash later.
+                reason = str(e).strip() or f"{type(e).__name__} (no message)"
+                failed_files.append((file, reason))
                 continue
 
         self.console.print(
             f"[green]✓[/green] Created {len(texts)} chunks from "
             f"{files_read} files."
         )
+
+        if failed_files:
+            self.console.print(
+                f"[yellow]⚠ {len(failed_files)} file(s) could not be "
+                "chunked and were skipped:[/yellow]"
+            )
+            for failed_path, reason in failed_files[:5]:
+                self.console.print(f"  [dim]{failed_path}: {reason}[/dim]")
+            if len(failed_files) > 5:
+                self.console.print(
+                    f"  [dim]... and {len(failed_files) - 5} more[/dim]"
+                )
+
+        if not texts:
+            first_error = (
+                f"{failed_files[0][0]}: {failed_files[0][1]}"
+                if failed_files
+                else "no readable files"
+            )
+            raise ValueError(
+                f"No chunks could be built from {files_read} file(s) in "
+                f"'{self.files_path}'. First error: {first_error}"
+            )
 
         with self.console.status(
             "[yellow]Tokenizing and building BM25 index...[/yellow]"

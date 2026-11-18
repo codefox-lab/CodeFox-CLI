@@ -105,3 +105,41 @@ def test_get_model_tag_returns_list() -> None:
     assert isinstance(tags, list)
     assert "BAAI/bge-small-en-v1.5" in tags
     assert "other" in tags
+
+
+def test_build_reports_error_and_skipped_files() -> None:
+    import bm25s
+
+    rag = LocalRAG.__new__(LocalRAG)
+    from rich.console import Console
+
+    rag.console = Console()
+    rag.all_files = ["bad.py", "good.py"]
+    rag.kwargs = rag._get_kwargs()
+    rag.retriever = bm25s.BM25()
+    rag.files = []
+    rag.client = None
+    rag.chunks = []
+    rag.embedding_name = "BAAI/bge-small-en-v1.5"
+    rag.files_path = "."
+
+    with patch(
+        "codefox.utils.parser.Parser.smart_chunk",
+        side_effect=LookupError(""),
+    ):
+        with pytest.raises(ValueError, match="No chunks could be built"):
+            rag.build()
+
+
+def test_smart_chunk_survives_missing_nltk_data() -> None:
+    from codefox.utils.parser import Parser
+
+    content = "def f():\n    return 1\n\ndef g():\n    return 2\n"
+    with patch("codefox.utils.parser.sent_tokenize", side_effect=LookupError):
+        with patch.object(
+            Parser, "get_ts_parser_by_extension", return_value=None
+        ):
+            chunks = Parser.smart_chunk(Path("x.py"), content, 300, 50)
+
+    assert chunks
+    assert "".join(chunks).replace(" ", "").count("return") == 2
