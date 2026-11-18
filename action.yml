@@ -74,6 +74,16 @@ runs:
           exit 1
         fi
 
+        # Embedding the whole checkout is what stalls CI: every chunk costs
+        # a CPU embedding on a 2-4 core runner. Unless the repo opted in,
+        # cap the index size so the review starts in a bounded time.
+        if [ "${CODEFOX_FULL_REPO_RAG:-false}" != "true" ]; then
+          CODEFOX_RAG_MAX_CHUNKS="${CODEFOX_RAG_MAX_CHUNKS:-600}"
+          CODEFOX_RAG_MAX_FILES="${CODEFOX_RAG_MAX_FILES:-300}"
+          export CODEFOX_RAG_MAX_CHUNKS CODEFOX_RAG_MAX_FILES
+          python -c "import os, yaml; p = '.codefox.yml'; c = yaml.safe_load(open(p)) or {}; m = c.setdefault('model', {}); m.setdefault('rag_chunk_size', 1000); m.setdefault('rag_chunk_overlap', 200); m.setdefault('rag_max_chunks', int(os.environ['CODEFOX_RAG_MAX_CHUNKS'])); m.setdefault('rag_max_files', int(os.environ['CODEFOX_RAG_MAX_FILES'])); yaml.safe_dump(c, open(p, 'w'), sort_keys=False); print('CodeFox RAG capped at', m['rag_max_chunks'], 'chunks /', m['rag_max_files'], 'files')"
+        fi
+
         codefox scan \
           --target-branch ${{ github.base_ref }} \
           --source-branch ${{ github.head_ref }} \

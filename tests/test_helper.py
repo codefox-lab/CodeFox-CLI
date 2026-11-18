@@ -194,3 +194,34 @@ def test_smart_chunk_fallback_to_sentences() -> None:
     chunks = Helper.smart_chunk(path, content, chunk_size=25, overlap=5)
     assert len(chunks) >= 1
     assert "First" in chunks[0] or "First" in " ".join(chunks)
+
+
+def test_get_all_files_skips_rag_artifacts(tmp_path) -> None:
+    from codefox.utils.helper import Helper
+
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+    for name in ("rag_index", "qdrant", "embedding_cache"):
+        d = tmp_path / name
+        d.mkdir()
+        (d / "leak.py").write_text("y = 2\n", encoding="utf-8")
+
+    found = Helper.get_all_files(str(tmp_path))
+    names = {f.rsplit("/", 1)[-1] for f in found}
+
+    assert "app.py" in names
+    assert "leak.py" not in names
+
+
+def test_get_all_files_skips_hidden_and_vendored_dirs(tmp_path) -> None:
+    from codefox.utils.helper import Helper
+
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+    for name in (".venv", ".mypy_cache", "node_modules", ".git"):
+        d = tmp_path / name / "pkg"
+        d.mkdir(parents=True)
+        (d / "vendored.py").write_text("y = 2\n", encoding="utf-8")
+
+    names = {f.rsplit("/", 1)[-1] for f in Helper.get_all_files(str(tmp_path))}
+
+    assert "app.py" in names
+    assert "vendored.py" not in names

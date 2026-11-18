@@ -16,6 +16,12 @@ class GitBranchNotFoundError(RuntimeError):
     """Raised when a requested source or target branch cannot be resolved."""
 
 
+SKIP_DIRS = frozenset({".git", "__pycache__", "node_modules"})
+RAG_ARTIFACT_DIRS = frozenset(
+    {"qdrant", "rag_index", "embedding_cache", "codefox_rag"}
+)
+
+
 if TYPE_CHECKING:
     import codefox.utils.local_rag as local_rag
 
@@ -55,11 +61,20 @@ class Helper:
         ignored_paths = Helper.read_codefoxignore()
 
         all_files_to_upload = []
-        for root, _, files in os.walk(path_files):
-            skip_dirs = [".git", "__pycache__", "node_modules"]
-            if os.path.basename(root) in skip_dirs or any(
-                ignored in root for ignored in ignored_paths
-            ):
+        for root, dirs, files in os.walk(path_files):
+            # Skip vendored dependencies, virtualenvs, caches and generated
+            # indexes. Indexing them is what makes real RAG builds crawl:
+            # a .venv alone can add thousands of files to embed.
+            dirs[:] = [
+                d
+                for d in dirs
+                if not Helper._is_ignored_dir(d)
+                and not any(
+                    ignored in os.path.join(root, d)
+                    for ignored in ignored_paths
+                )
+            ]
+            if any(ignored in root for ignored in ignored_paths):
                 continue
 
             for filename in files:
@@ -68,6 +83,14 @@ class Helper:
                     all_files_to_upload.append(os.path.join(root, filename))
 
         return all_files_to_upload
+
+    @staticmethod
+    def _is_ignored_dir(name: str) -> bool:
+        return (
+            name.startswith(".")
+            or name in SKIP_DIRS
+            or name in RAG_ARTIFACT_DIRS
+        )
 
     @staticmethod
     def get_diff(
