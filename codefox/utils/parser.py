@@ -134,10 +134,15 @@ class Parser:
     def _split_sentences(cls, text: str) -> list[str]:
         """Split text into sentences without depending on NLTK data files.
 
-        NLTK 3.9 `sent_tokenize` needs the `punkt_tab` package; on a fresh
-        CI runner it raises `LookupError`. Chunking must never fail because
-        of that, so a regex split is the fallback.
+        NLTK 3.9 `sent_tokenize` needs the `punkt_tab` package and its
+        English pickled model is large; splitting plain code with it is slow
+        and pointless, so code-like text uses a cheap line-aware split.
         """
+        if cls._looks_like_code(text):
+            return [
+                line for line in text.splitlines(keepends=True) if line.strip()
+            ]
+
         try:
             sentences = sent_tokenize(text)
         except Exception:
@@ -146,38 +151,83 @@ class Parser:
         return [s for s in sentences if s.strip()]
 
     @classmethod
-    def chunk_text_sentences(
-        cls, text: str, chunk_size: int, overlap: int
-    ) -> list[str]:
-        sentences = cls._split_sentences(text)
-        chunks = []
-        current = []
+    def _looks_like_code(cls, text: str) -> bool:
+        code_lines = 0
+        total = 0
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            total += 1
+            code_like = stripped.endswith(
+                (";", "{", "}", ":", "->", ",", "(")
+            ) or bool(
+                re.match(
+                    r"^(def |class |import |from |return|if |for |while "
+                    r"|#|@|\w+\()",
+                    stripped,
+                )
+            )
+            if code_like:
+                code_lines += 1
+            if total >= 40:
+                break
 
+        return total > 0 and code_lines / total >= 0.5
+
+    @classmethod
+    def _pack(
+        cls, units: list[str], chunk_size: int, overlap: int
+    ) -> list[str]:
+        """Pack units into chunks of at most `chunk_size` characters.
+
+        Long units are hard-sliced and the overlap tail is only added when
+        it still fits, so no chunk exceeds the requested size. The budget
+        keeps room for the single separator inserted when joining.
+        """
+        budget = max(chunk_size - 1, 1)
+        overlap = min(overlap, budget)
+        step = max(budget - overlap, 1)
+
+        flattened: list[str] = []
+        for unit in units:
+            if len(unit) <= budget:
+                flattened.append(unit)
+                continue
+            flattened.extend(
+                unit[i : i + budget] for i in range(0, len(unit), step)
+            )
+
+        chunks: list[str] = []
+        current: list[str] = []
         current_len = 0
 
-        for sent in sentences:
-            current.append(sent)
-            current_len += len(sent)
+        for unit in flattened:
+            if current and current_len + 1 + len(unit) > budget:
+                text = " ".join(current)
+                chunks.append(text)
+                tail = text[-overlap:] if overlap else ""
+                while tail and len(tail) + 1 + len(unit) > budget:
+                    tail = tail[1:]
+                current = [tail] if tail else []
+                current_len = len(tail)
 
-            if current_len >= chunk_size:
-                chunks.append(" ".join(current))
-
-                overlap_text = " ".join(current)[-overlap:]
-                current = [overlap_text]
-                current_len = len(overlap_text)
+            current_len += (1 if current else 0) + len(unit)
+            current.append(unit)
 
         if current:
             chunks.append(" ".join(current))
 
-        if not chunks and text.strip():
-            # No sentence boundaries (e.g. dense code): fall back to
-            # fixed-size slices so a file is never dropped silently.
-            step = max(chunk_size - overlap, 1)
-            chunks = [
-                text[i : i + chunk_size] for i in range(0, len(text), step)
-            ]
+        return [c for c in chunks if c.strip()]
 
-        return chunks
+    @classmethod
+    def chunk_text_sentences(
+        cls, text: str, chunk_size: int, overlap: int
+    ) -> list[str]:
+        if not text.strip():
+            return []
+
+        return cls._pack(cls._split_sentences(text), chunk_size, overlap)
 
     @classmethod
     def smart_chunk(
@@ -196,6 +246,10 @@ class Parser:
             except Exception:
                 chunks = []
             if chunks:
+                # Whole functions/classes can exceed chunk_size; pack them
+                # so the embedding cost per file stays bounded.
+                if max(len(c) for c in chunks) > chunk_size:
+                    return cls._pack(chunks, chunk_size, overlap)
                 return chunks
 
         return cls.chunk_text_sentences(content, chunk_size, overlap)

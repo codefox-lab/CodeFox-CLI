@@ -143,3 +143,33 @@ def test_smart_chunk_survives_missing_nltk_data() -> None:
 
     assert chunks
     assert "".join(chunks).replace(" ", "").count("return") == 2
+
+
+def test_chunk_size_is_honored() -> None:
+    from codefox.utils.parser import Parser
+
+    text = "\n".join(
+        f'def f{i}():\n    return "value {i}"\n' for i in range(400)
+    )
+    chunks = Parser.chunk_text_sentences(text, 300, 50)
+
+    assert chunks
+    assert max(len(c) for c in chunks) <= 300
+
+
+def test_code_is_not_tokenized_as_prose() -> None:
+    from codefox.utils.parser import Parser
+
+    code = "def a():\n    return 1\n\nclass B:\n    pass\n"
+    assert Parser._looks_like_code(code) is True
+    assert Parser._looks_like_code("Hello world. This is prose.") is False
+
+
+def test_regex_fallback_chunks_remain_bounded() -> None:
+    from codefox.utils.parser import Parser
+
+    text = "line of code;\n" * 2000
+    chunks = Parser.chunk_text_sentences(text, 1000, 200)
+
+    assert chunks
+    assert max(len(c) for c in chunks) <= 1000
