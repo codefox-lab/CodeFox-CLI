@@ -190,7 +190,7 @@ Stores the API token for the model. This file is used by the CLI for authenticat
 | Command   | Description                                                                                          |
 | --------- | ---------------------------------------------------------------------------------------------------- |
 | `init`    | Saves the API key locally and creates a `.codefoxignore` and `.codefox.yml` file in the current directory.       |
-| `list`    | Shows the full list of models available for the current provider (Gemini, Ollama, or OpenRouter) and embeddings (fastembed) from `.codefox.yml`. |
+| `list`    | Shows the full list of models available for the current provider (Gemini, Ollama, llama.cpp, or OpenRouter) and embeddings (fastembed) from `.codefox.yml`. |
 | `scan`    | Collects changes from the `git diff`, uploads files to the File Store, and sends requests to the configured model. |
 | `version` | Displays the current CodeFox CLI version. |
 | `clean` | Clears local cache used by CodeFox |

@@ -121,28 +121,17 @@ class PromptTemplate(Template):
             review_policy += f"- Max findings: {review.get('max_issues')}\n"
 
         if review.get("diff_only"):
-            review_policy += f"- Diff-only mode: {review.get('diff_only')}"
+            review_policy += "- Review changed lines only\n"
 
-        parts.append(f"""
-## REVIEW POLICY
-{review_policy}
-""")
+        if review.get("tools"):
+            parts.append(f"## TOOL USE: {audit_system.SYSTEM_TOOL_USE}")
+        else:
+            parts.append(
+                f"## TOOL NOT USE: {audit_system.SYSTEM_TOOL_NOT_USE}"
+            )
 
-        parts.append("""
-Do not show internal reasoning.
-Report only final findings.
-""")
-
-        severity = review.get("severity")
-        if severity:
-            parts.append(f"""
-Report only issues with **severity >= {(severity or "").upper()}**
-""")
-
-        if review.get("max_issues"):
-            parts.append(f"""
-Limit the output to the **{review.get("max_issues")}** most critical findings.
-""")
+        if review_policy:
+            parts.append(f"## REVIEW POLICY\n{review_policy.strip()}")
 
         if prompt_cfg.get("extra"):
             parts.append(prompt_cfg["extra"])
