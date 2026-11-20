@@ -71,9 +71,9 @@ It is built for **diff review workflows**, terminal usage, and CI/CD automation.
 
 Current:
 - GitHub Actions
+- GitLab
 
 Planned:
-- GitLab
 - Bitbucket
 
 ---
