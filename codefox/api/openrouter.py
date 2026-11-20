@@ -128,6 +128,7 @@ class OpenRouter(BaseAPI):
                 break
 
         raw = message.content
+        print(raw)
         return Response(text=raw if raw is not None else "")
 
     def remove_files(self) -> None:

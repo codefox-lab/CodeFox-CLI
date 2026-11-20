@@ -1,26 +1,14 @@
 CONTENT_FULL = """
-DIFF AUDIT
+Review this diff for proven, actionable bugs. Consider intended change,
+OLD -> NEW behavior, affected data/control flow, and concrete failure paths.
+Report only issues introduced by changed lines. Do not guess about unseen code.
 
-Diff:
+DIFF:
 {diff_text}
-
-Tasks:
-
-1. Tool usage (symbols searched)
-2. Changed lines
-3. Behavior change: OLD → NEW
-4. Execution path (propagation)
-5. Breakage points (new edge cases)
-
-Missing definitions → use search.
-
-If still missing → NEED MORE CONTEXT
 """
 
 CONTENT_RELEVANT_CONTEXT = """
-RELEVANT CONTEXT
-(Use only if needed to trace data flow.
-Do not analyze this section by itself.)
-
+OPTIONAL PROJECT CONTEXT (use only to understand the diff; do not report
+pre-existing issues from this section):
 {files_context}
 """

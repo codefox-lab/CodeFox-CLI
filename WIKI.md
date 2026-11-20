@@ -54,6 +54,7 @@ Supported values:
 | ------------ | ----------- |
 | `gemini`     | Google Gemini API (default). Requires API key in `.codefoxenv`. |
 | `ollama`     | Local or remote Ollama server. RAG uses the configured embedding model. |
+| `llamacpp`   | Local or remote llama.cpp `llama-server` with its OpenAI-compatible API. |
 | `openrouter` | OpenRouter API (many models). Uses embeddings for RAG context. |
 
 Example:
@@ -149,12 +150,13 @@ Request timeout in seconds for API calls.
 ### `model.base_url`
 
 **Type:** `string | null`  
-**Relevant for:** `ollama`, `openrouter`
+**Relevant for:** `ollama`, `llamacpp`, `openrouter`
 
 Overrides the default API base URL.
 
 * **Ollama:** default `https://ollama.com`. Set to your Ollama host, e.g. `http://localhost:11434` for local.
 * **OpenRouter:** default `https://openrouter.ai/api/v1`. Override only if using a proxy or custom endpoint.
+* **llama.cpp:** default `http://localhost:8080/v1`. Set this to the `llama-server` API base URL.
 
 Example (Ollama local):
 
