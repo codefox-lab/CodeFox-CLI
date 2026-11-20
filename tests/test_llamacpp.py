@@ -42,7 +42,10 @@ def test_connection_and_model_listing_use_openai_compatible_client() -> None:
 def test_custom_base_url_is_used() -> None:
     with patch("codefox.api.base_api.Helper.read_yml") as read_yml:
         read_yml.return_value = {
-            "model": {"name": "local-model", "base_url": "http://host:9000/v1"},
+            "model": {
+                "name": "local-model",
+                "base_url": "http://host:9000/v1",
+            },
             "review": {},
         }
         with patch("codefox.api.llamacpp.OpenAI") as openai:
